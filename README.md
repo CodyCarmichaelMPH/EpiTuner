@@ -34,19 +34,7 @@ EpiTuner is designed to handle medical datasets with expert ratings, providing t
 
 ```
 EpiTuner/
-├── Docs/
-│   ├── master_functional_overview.txt
-│   ├── .cursorrules
-│   └── queries/
-│       ├── 01_data_loader_query.txt
-│       ├── 02_schema_mapper_query.txt
-│       ├── 03_formatter_promptbuilder_query.txt
-│       ├── 04_inference_runner_query.txt
-│       ├── 05_fine_tuner_query.txt
-│       ├── 06_contextualizer_query.txt
-│       ├── 07_debugging_logger_query.txt
-│       ├── 08_gui_query.txt
-│       └── 09_formatter_query.txt
+
 ├── scripts/
 │   ├── data_loader.py          # Implemented
 │   ├── schema_mapper.py        # Implemented
@@ -298,15 +286,10 @@ Category: Viral
    - Training validation
 
 ## Contributing
-
-1. Follow the coding standards in `Docs/.cursorrules`
 2. Write unit tests for all new functionality
 3. Ensure 90%+ test coverage
 4. Update documentation as needed
 
-## License
-
-[Add your license information here]
 
 ## Support
 
