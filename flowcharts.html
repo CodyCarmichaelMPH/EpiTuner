@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EpiTuner System Flowchart</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .layer {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .node {
+            background: #3498db;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            min-width: 150px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .node:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .node.clicked {
+            background: #27ae60;
+            box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.3);
+        }
+
+        .input-layer .node { background: #e74c3c; }
+        .processing-layer .node { background: #3498db; }
+        .model-layer .node { background: #f39c12; }
+        .output-layer .node { background: #9b59b6; }
+
+        .node-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+
+        .node-description {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .arrow {
+            text-align: center;
+            font-size: 2em;
+            color: #7f8c8d;
+            margin: 10px 0;
+        }
+
+        .sub-flowchart {
+            display: none;
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 25px;
+            margin-top: 20px;
+        }
+
+        .sub-flowchart.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .sub-flowchart h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .sub-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .step {
+            background: white;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .step h4 {
+            color: #3498db;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .step p {
+            color: #555;
+            line-height: 1.4;
+            font-size: 0.9em;
+        }
+
+        .close-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 15px;
+        }
+
+        .close-btn:hover {
+            background: #c0392b;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .control-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: background 0.3s ease;
+        }
+
+        .control-btn:hover {
+            background: #2980b9;
+        }
+
+        .control-btn.active {
+            background: #27ae60;
+        }
+
+        .legend {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+
+        .legend h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            padding: 5px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 10px;
+        }
+
+        .legend-text {
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .flow-diagram-viewer {
+            display: none;
+            background: #2c3e50;
+            color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .flow-diagram-viewer.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .view-flow-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+
+        .view-flow-btn:hover {
+            background: #2980b9;
+        }
+
+        @media (max-width: 768px) {
+            .layer {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .sub-steps {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EpiTuner System Flowchart</h1>
+            <p>Interactive visualization of the complete data flow pipeline</p>
+        </div>
+
+        <div class="content">
+            <div class="controls">
+                <button class="control-btn" onclick="highlightLayer('input')">Input Layer</button>
+                <button class="control-btn" onclick="highlightLayer('processing')">Processing Layer</button>
+                <button class="control-btn" onclick="highlightLayer('model')">Model Layer</button>
+                <button class="control-btn" onclick="highlightLayer('output')">Output Layer</button>
+                <button class="control-btn" onclick="clearHighlights()">Clear</button>
+            </div>
+
+            <div class="flowchart">
+                <!-- Input Layer -->
+                <div class="layer input-layer">
+                    <div class="node" onclick="showSubFlowchart('raw-data')">
+                        <div class="node-title">Raw Dataset</div>
+                        <div class="node-description">CSV/Excel Files</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('config')">
+                        <div class="node-title">Configuration</div>
+                        <div class="node-description">settings.json</div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- Processing Layer -->
+                <div class="layer processing-layer">
+                    <div class="node" onclick="showSubFlowchart('data-loader')">
+                        <div class="node-title">Data Loader</div>
+                        <div class="node-description">Validation & Cleaning</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('schema-mapper')">
+                        <div class="node-title">Schema Mapper</div>
+                        <div class="node-description">Rating Standardization</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('formatter')">
+                        <div class="node-title">Formatter</div>
+                        <div class="node-description">Context Summary</div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- Model Layer -->
+                <div class="layer model-layer">
+                    <div class="node" onclick="showSubFlowchart('gui')">
+                        <div class="node-title">GUI Interface</div>
+                        <div class="node-description">Dynamic Model Selection</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('inference')">
+                        <div class="node-title">Inference</div>
+                        <div class="node-description">Model Predictions</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('fine-tuner')">
+                        <div class="node-title">Fine Tuner</div>
+                        <div class="node-description">Model Training</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('contextualizer')">
+                        <div class="node-title">Contextualizer</div>
+                        <div class="node-description">Few-shot Learning</div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- Output Layer -->
+                <div class="layer output-layer">
+                    <div class="node" onclick="showSubFlowchart('results')">
+                        <div class="node-title">Inference Results</div>
+                        <div class="node-description">CSV Files</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('models')">
+                        <div class="node-title">Fine-tuned Models</div>
+                        <div class="node-description">Config Files</div>
+                    </div>
+                    <div class="node" onclick="showSubFlowchart('analysis')">
+                        <div class="node-title">Analysis</div>
+                        <div class="node-description">Performance Metrics</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-flowcharts -->
+            <div id="raw-data-sub" class="sub-flowchart">
+                <h3>Raw Dataset Input - Configuration & Requirements</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>File Format Requirements</h4>
+                        <p><strong>Supported:</strong> CSV, Excel (.xlsx, .xls)<br>
+                        <strong>Encoding:</strong> UTF-8<br>
+                        <strong>Size Limit:</strong> 100MB per file</p>
+                    </div>
+                    <div class="step">
+                        <h4>Required Columns</h4>
+                        <p><strong>Expert_Rating:</strong> Original expert ratings (any format)<br>
+                        <strong>Rationale_of_Rating:</strong> Expert reasoning text<br>
+                        <strong>Text Fields:</strong> ChiefComplaintOrig, DischargeDiagnosis, TriageNotes</p>
+                    </div>
+                    <div class="step">
+                        <h4>Data Quality Requirements</h4>
+                        <p><strong>Minimum Records:</strong> 10 for pattern extraction<br>
+                        <strong>Rating Diversity:</strong> At least 2 different rating values<br>
+                        <strong>Text Content:</strong> Non-empty text fields for context</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div id="config-sub" class="sub-flowchart">
+                <h3>Configuration Settings - Detailed Parameters</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>Ollama Server Configuration</h4>
+                        <p><strong>Server URL:</strong> http://localhost:11434<br>
+                        <strong>Timeout:</strong> 180 seconds (low power mode)<br>
+                        <strong>Batch Size:</strong> Variable, based on user needs<br>
+                        <strong>Max Retries:</strong> 2</p>
+                    </div>
+                    <div class="step">
+                        <h4>Model Parameters</h4>
+                        <p><strong>Default Model:</strong> llama3.2:1b<br>
+                        <strong>Temperature:</strong> 0.1 (consistent outputs)<br>
+                        <strong>Max Tokens:</strong> 512<br>
+                        <strong>Context Window:</strong> 4096</p>
+                    </div>
+                    <div class="step">
+                        <h4>Processing Options</h4>
+                        <p><strong>Validation Mode:</strong> Strict (required columns)<br>
+                        <strong>Data Cleaning:</strong> Auto (handle missing values)<br>
+                        <strong>Output Format:</strong> CSV, JSONL, Metadata<br>
+                        <strong>Logging Level:</strong> INFO</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div id="data-loader-sub" class="sub-flowchart">
+                <h3>Data Loader Process Flow</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. File Upload & Validation</h4>
+                        <p><strong>Input:</strong> CSV/Excel file<br>
+                        <strong>Validation:</strong> Format, size, encoding<br>
+                        <strong>Output:</strong> Validated file path</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Schema Validation</h4>
+                        <p><strong>Check:</strong> Required columns exist<br>
+                        <strong>Validate:</strong> Data types and formats<br>
+                        <strong>Output:</strong> Schema validation report</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. Data Cleaning</h4>
+                        <p><strong>Process:</strong> Handle missing values<br>
+                        <strong>Normalize:</strong> Text formatting<br>
+                        <strong>Output:</strong> Cleaned DataFrame</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Context Block Creation</h4>
+                        <p><strong>Combine:</strong> Text fields into Context_Block<br>
+                        <strong>Format:</strong> Structured for LLM processing<br>
+                        <strong>Output:</strong> Enhanced DataFrame</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Rating Extraction</h4>
+                        <p><strong>Extract:</strong> Unique expert ratings<br>
+                        <strong>Analyze:</strong> Rating frequencies<br>
+                        <strong>Output:</strong> Rating analysis report</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Output Generation</h4>
+                        <p><strong>Generate:</strong> Cleaned DataFrame<br>
+                        <strong>Create:</strong> Metadata and validation results<br>
+                        <strong>Output:</strong> Ready for schema mapping</p>
+                    </div>
+                </div>
+                <button class="view-flow-btn" onclick="showFlowDiagram('data-loader')">View Flow Diagram</button>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+                <div id="data-loader-flow" class="flow-diagram-viewer">
+DATA LOADER PROCESS FLOW
+========================
+
+INPUT VALIDATION
+----------------
+Input CSV/Excel File → Validate File Format & Size
+                              ↓
+                        Valid? → Yes → Load into DataFrame
+                              ↓
+                             No → Raise FileError
+                              ↓
+                        DataFrame Loaded → Check Required Columns
+                              ↓
+                        All Required Columns Present? → Yes → Validate Data Types
+                              ↓
+                             No → Raise ValidationError
+                              ↓
+                        Data Types Valid? → Yes → Check for Missing Values
+                              ↓
+                             No → Raise ValidationError
+                              ↓
+                        Handle Missing Values → Clean Text Data
+                              ↓
+                        Create Context_Block Column → Combine Text Fields
+                              ↓
+                        Extract Unique Ratings → Analyze Rating Distribution
+                              ↓
+                        Generate Validation Report → Return Cleaned DataFrame
+
+OUTPUT
+------
+Cleaned DataFrame with:
+- Validated and cleaned data
+- Context_Block column created
+- Missing values handled
+- Rating analysis completed
+- Validation metadata generated
+                </div>
+            </div>
+
+            <div id="schema-mapper-sub" class="sub-flowchart">
+                <h3>Schema Mapper Process Flow</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. Rating Analysis</h4>
+                        <p><strong>Input:</strong> Cleaned DataFrame<br>
+                        <strong>Extract:</strong> Unique ratings and frequencies<br>
+                        <strong>Output:</strong> Rating distribution report</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Mapping Method Selection</h4>
+                        <p><strong>Options:</strong> Manual, Predefined, Auto-detect<br>
+                        <strong>Default:</strong> Auto-detect with manual override<br>
+                        <strong>Output:</strong> Selected mapping strategy</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. Rating Standardization</h4>
+                        <p><strong>Scale:</strong> Convert to 0-2 scale<br>
+                        <strong>Mapping:</strong> 0=No Match, 1=Partial, 2=Clear<br>
+                        <strong>Output:</strong> Standardized ratings</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Validation</h4>
+                        <p><strong>Check:</strong> All ratings mapped<br>
+                        <strong>Verify:</strong> Mapping quality and coverage<br>
+                        <strong>Output:</strong> Validation report</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Metadata Generation</h4>
+                        <p><strong>Create:</strong> Mapping documentation<br>
+                        <strong>Store:</strong> Reproducibility information<br>
+                        <strong>Output:</strong> Mapping metadata</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Output Preparation</h4>
+                        <p><strong>Generate:</strong> Mapped DataFrame<br>
+                        <strong>Add:</strong> Standardized_Rating column<br>
+                        <strong>Output:</strong> Ready for formatting</p>
+                    </div>
+                </div>
+                <button class="view-flow-btn" onclick="showFlowDiagram('schema-mapper')">View Flow Diagram</button>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+                <div id="schema-mapper-flow" class="flow-diagram-viewer">
+SCHEMA MAPPER PROCESS FLOW
+==========================
+
+RATING ANALYSIS
+---------------
+Input DataFrame → Extract Unique Expert Ratings
+                              ↓
+                        Analyze Rating Frequencies → Generate Distribution Report
+                              ↓
+                        Present Rating Options to User
+
+MAPPING METHOD SELECTION
+-----------------------
+Rating Distribution → Choose Mapping Method
+                              ↓
+                      ┌─────────────────┬─────────────────┐
+                      ↓                 ↓                 ↓
+                Manual Mapping    Predefined      Auto-Detect
+                (User Input)      Mapping         (Smart Guess)
+                      ↓                 ↓                 ↓
+                User Maps Each    Use Established  Analyze Patterns
+                Rating Value      Classification   in Rating Data
+                      ↓                 ↓                 ↓
+                Validate User     Validate         Validate
+                Input             Predefined       Auto-Detected
+                                  Mapping          Mapping
+
+RATING STANDARDIZATION
+---------------------
+Selected Mapping → Apply Mapping to All Ratings
+                              ↓
+                        Convert to 0-2 Scale:
+                        - 0 = No Match
+                        - 1 = Partial Match  
+                        - 2 = Clear Match
+                              ↓
+                        Add Standardized_Rating Column
+
+VALIDATION & OUTPUT
+------------------
+Standardized Ratings → Validate All Ratings Mapped
+                              ↓
+                        Check Mapping Quality → Generate Validation Report
+                              ↓
+                        Create Mapping Metadata → Return Mapped DataFrame
+
+OUTPUT
+------
+Mapped DataFrame with:
+- Original Expert_Rating column preserved
+- New Standardized_Rating column (0-2 scale)
+- Mapping metadata and validation report
+- Ready for prompt formatting
+                </div>
+            </div>
+
+            <div id="formatter-sub" class="sub-flowchart">
+                <h3>Formatter Process - Context Summary Approach</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. Method Selection</h4>
+                        <p><strong>Context Summary:</strong> Extract patterns (recommended)<br>
+                        <strong>Traditional:</strong> Individual case prompts<br>
+                        <strong>Output:</strong> Selected formatting method</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Pattern Extraction</h4>
+                        <p><strong>Analyze:</strong> Positive cases (rating > 0)<br>
+                        <strong>Extract:</strong> Common indicators and terms<br>
+                        <strong>Output:</strong> Pattern analysis report</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. Context Creation</h4>
+                        <p><strong>Generate:</strong> "Look for symptoms: fever, cough"<br>
+                        <strong>Include:</strong> Positive and negative indicators<br>
+                        <strong>Output:</strong> Context summary</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Prompt Generation</h4>
+                        <p><strong>Create:</strong> Structured prompts with context<br>
+                        <strong>Format:</strong> Evaluation instructions<br>
+                        <strong>Output:</strong> Formatted prompts</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Validation</h4>
+                        <p><strong>Check:</strong> Prompt quality and format<br>
+                        <strong>Verify:</strong> Context relevance<br>
+                        <strong>Output:</strong> Validation report</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Output Generation</h4>
+                        <p><strong>Generate:</strong> Training and inference prompts<br>
+                        <strong>Create:</strong> Statistics and metadata<br>
+                        <strong>Output:</strong> Ready for model operations</p>
+                    </div>
+                </div>
+                <button class="view-flow-btn" onclick="showFlowDiagram('formatter')">View Flow Diagram</button>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+                <div id="formatter-flow" class="flow-diagram-viewer">
+FORMATTER PROCESS FLOW - CONTEXT SUMMARY
+========================================
+
+METHOD SELECTION
+----------------
+Input Mapped DataFrame → Choose Formatting Method
+                              ↓
+                      ┌─────────────────┬─────────────────┐
+                      ↓                 ↓                 ↓
+                Context Summary   Traditional    Individual
+                (Recommended)     Approach       Prompts
+                      ↓                 ↓                 ↓
+                Extract Key      Create Individual  Format with
+                Findings from    Prompts per        Template
+                Training Data    Training Case       Include Rating
+                      ↓                 ↓                 ↓
+                Separate Positive/      Format with       & Rationale
+                Negative Cases          Template
+                      ↓                 ↓                 ↓
+                Extract Common          Include Rating    Standard
+                Patterns from           & Rationale       Prompts
+                Positive Cases          ↓                 Per Case
+                      ↓                 Standard
+                Extract Common          Prompts
+                Patterns from           Per Case
+                Negative Cases
+                      ↓
+                Create Context Summary
+                "Look for symptoms: fever, cough, etc."
+                      ↓
+                Generate Prompts with Context Summary
+                      ↓
+                Context Summary Prompts with Pattern-Based Context
+
+CONTEXT SUMMARY PROCESS
+-----------------------
+Training Data → Separate Positive Cases (Rating > 0)
+                              ↓
+                        Extract Common Terms & Patterns
+                              ↓
+                        Separate Negative Cases (Rating = 0)
+                              ↓
+                        Extract Common Terms & Patterns
+                              ↓
+                        Create Context Summary:
+                        "Look for: [positive indicators]
+                         Avoid: [negative indicators]"
+                              ↓
+                        Apply Context to All Prompts
+
+OUTPUT GENERATION
+-----------------
+Context Summary Prompts → Generate Prompt Statistics
+Traditional Prompts    → Count, Rating Distribution
+                              ↓
+                        Return Formatted Prompts
+
+OUTPUT
+------
+Formatted Prompts with:
+- Context Summary approach (recommended)
+- Pattern-based context from training data
+- Structured evaluation instructions
+- Statistics and metadata
+- Ready for Ollama model operations
+                </div>
+            </div>
+
+            <div id="gui-sub" class="sub-flowchart">
+                <h3>GUI Interface Workflow</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. Initialization</h4>
+                        <p><strong>Setup:</strong> Session state and page configuration<br>
+                        <strong>Load:</strong> Default settings and preferences<br>
+                        <strong>Output:</strong> Initialized GUI environment</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Model Discovery</h4>
+                        <p><strong>Fetch:</strong> Available models from Ollama server<br>
+                        <strong>Populate:</strong> Dynamic dropdown selection<br>
+                        <strong>Output:</strong> Model selection interface</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. User Interface</h4>
+                        <p><strong>Render:</strong> Step-by-step workflow<br>
+                        <strong>Track:</strong> Progress and validation<br>
+                        <strong>Output:</strong> Interactive user interface</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Data Processing</h4>
+                        <p><strong>Orchestrate:</strong> Data loading, mapping, formatting<br>
+                        <strong>Validate:</strong> Each step completion<br>
+                        <strong>Output:</strong> Processed data ready for models</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Model Operations</h4>
+                        <p><strong>Execute:</strong> Inference, fine-tuning, or contextualization<br>
+                        <strong>Monitor:</strong> Progress and error handling<br>
+                        <strong>Output:</strong> Model operation results</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Results Display</h4>
+                        <p><strong>Show:</strong> Comprehensive results and metrics<br>
+                        <strong>Provide:</strong> Export options and analysis<br>
+                        <strong>Output:</strong> Complete session report</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div id="inference-sub" class="sub-flowchart">
+                <h3>Inference Process - Configuration & Flow</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. Model Selection</h4>
+                        <p><strong>Input:</strong> Available Ollama models<br>
+                        <strong>Default:</strong> llama3.2:1b (low power mode)<br>
+                        <strong>Output:</strong> Selected model configuration</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Prompt Preparation</h4>
+                        <p><strong>Input:</strong> Formatted prompts from Formatter<br>
+                        <strong>Batch:</strong> Variable batch size based on user needs<br>
+                        <strong>Output:</strong> Prepared inference requests</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. Batch Processing</h4>
+                        <p><strong>Execute:</strong> Inference with 180s timeout<br>
+                        <strong>Retry:</strong> Failed requests (max 2 attempts)<br>
+                        <strong>Output:</strong> Raw model responses</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Response Parsing</h4>
+                        <p><strong>Extract:</strong> Predictions and ratings<br>
+                        <strong>Parse:</strong> Structured output format<br>
+                        <strong>Output:</strong> Parsed predictions</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Error Handling</h4>
+                        <p><strong>Handle:</strong> Timeouts and connection issues<br>
+                        <strong>Log:</strong> Errors and retry attempts<br>
+                        <strong>Output:</strong> Error report and recovery</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Result Generation</h4>
+                        <p><strong>Create:</strong> Comprehensive results with metadata<br>
+                        <strong>Include:</strong> Predictions, confidence, timestamps<br>
+                        <strong>Output:</strong> Inference results CSV</p>
+                    </div>
+                </div>
+                <button class="view-flow-btn" onclick="showFlowDiagram('inference')">View Flow Diagram</button>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+                <div id="inference-flow" class="flow-diagram-viewer">
+INFERENCE PROCESS FLOW
+======================
+
+MODEL SELECTION
+---------------
+Available Ollama Models → Select Model (default: llama3.2:1b)
+                              ↓
+                        Configure Model Parameters:
+                        - Temperature: 0.1
+                        - Max Tokens: 512
+                        - Context Window: 4096
+                              ↓
+                        Validate Model Availability
+
+PROMPT PREPARATION
+------------------
+Formatted Prompts → Determine Batch Size (user configurable)
+                              ↓
+                        Prepare Inference Requests:
+                        - Format prompts for Ollama
+                        - Set timeout: 180 seconds
+                        - Configure retry logic: max 2 attempts
+                              ↓
+                        Queue Prompts for Processing
+
+BATCH PROCESSING
+----------------
+Prepared Requests → Send to Ollama Server (localhost:11434)
+                              ↓
+                        Monitor Processing:
+                        - Track progress per batch
+                        - Handle timeouts gracefully
+                        - Retry failed requests
+                              ↓
+                        Collect Raw Model Responses
+
+RESPONSE PARSING
+----------------
+Raw Responses → Extract Predictions & Ratings
+                              ↓
+                        Parse Structured Output:
+                        - Extract numerical ratings
+                        - Parse confidence scores
+                        - Handle malformed responses
+                              ↓
+                        Validate Response Quality
+
+ERROR HANDLING
+--------------
+Processing Errors → Log Error Details
+                              ↓
+                        Retry Logic:
+                        - Attempt retry (max 2 times)
+                        - Exponential backoff
+                        - Fallback handling
+                              ↓
+                        Generate Error Report
+
+RESULT GENERATION
+-----------------
+Parsed Predictions → Compile Results
+                              ↓
+                        Add Metadata:
+                        - Timestamps
+                        - Model configuration
+                        - Processing statistics
+                              ↓
+                        Generate CSV Output
+
+OUTPUT
+------
+Inference Results CSV with:
+- Model predictions and ratings
+- Confidence scores
+- Processing timestamps
+- Error logs and retry information
+- Complete metadata for analysis
+                </div>
+            </div>
+
+            <div id="fine-tuner-sub" class="sub-flowchart">
+                <h3>Fine Tuner Process - Configuration & Flow</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. Dataset Preparation</h4>
+                        <p><strong>Input:</strong> Formatted prompts from Formatter<br>
+                        <strong>Split:</strong> Training/validation sets (80/20)<br>
+                        <strong>Output:</strong> Training-ready dataset</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Model Configuration</h4>
+                        <p><strong>Base Model:</strong> llama3.2:1b<br>
+                        <strong>Learning Rate:</strong> 1e-5 (conservative)<br>
+                        <strong>Epochs:</strong> 3 (low power mode)<br>
+                        <strong>Output:</strong> Training configuration</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. Training Execution</h4>
+                        <p><strong>Execute:</strong> Fine-tuning with progress monitoring<br>
+                        <strong>Monitor:</strong> Loss, accuracy, validation metrics<br>
+                        <strong>Output:</strong> Training progress logs</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Validation</h4>
+                        <p><strong>Evaluate:</strong> Model performance on validation set<br>
+                        <strong>Metrics:</strong> Accuracy, precision, recall<br>
+                        <strong>Output:</strong> Validation results</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Model Export</h4>
+                        <p><strong>Save:</strong> Fine-tuned model configuration<br>
+                        <strong>Create:</strong> YAML config file<br>
+                        <strong>Output:</strong> Deployable model</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Documentation</h4>
+                        <p><strong>Generate:</strong> Training metadata and reports<br>
+                        <strong>Include:</strong> Hyperparameters, performance metrics<br>
+                        <strong>Output:</strong> Complete training documentation</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div id="contextualizer-sub" class="sub-flowchart">
+                <h3>Contextualizer Process - Configuration & Flow</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. Example Selection</h4>
+                        <p><strong>Input:</strong> Training data with expert ratings<br>
+                        <strong>Select:</strong> Representative examples (3-5 per category)<br>
+                        <strong>Output:</strong> Curated example set</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Meta-Prompt Construction</h4>
+                        <p><strong>Create:</strong> Few-shot prompts with examples<br>
+                        <strong>Include:</strong> Instructions and evaluation criteria<br>
+                        <strong>Output:</strong> Contextual prompt template</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. Context Application</h4>
+                        <p><strong>Apply:</strong> Contextual examples to new cases<br>
+                        <strong>Format:</strong> Consistent prompt structure<br>
+                        <strong>Output:</strong> Contextualized evaluation prompts</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Inference Execution</h4>
+                        <p><strong>Execute:</strong> Contextualized inference<br>
+                        <strong>Model:</strong> Base model with example guidance<br>
+                        <strong>Output:</strong> Contextual predictions</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Result Analysis</h4>
+                        <p><strong>Compare:</strong> With and without contextual examples<br>
+                        <strong>Analyze:</strong> Performance improvements<br>
+                        <strong>Output:</strong> Comparative analysis report</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Output Generation</h4>
+                        <p><strong>Generate:</strong> Contextual results and metrics<br>
+                        <strong>Include:</strong> Example effectiveness analysis<br>
+                        <strong>Output:</strong> Contextual evaluation results</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div id="results-sub" class="sub-flowchart">
+                <h3>Results & Analysis Process - Configuration & Flow</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>1. Data Collection</h4>
+                        <p><strong>Input:</strong> Model predictions and ground truth<br>
+                        <strong>Gather:</strong> All evaluation data and metadata<br>
+                        <strong>Output:</strong> Complete evaluation dataset</p>
+                    </div>
+                    <div class="step">
+                        <h4>2. Metric Calculation</h4>
+                        <p><strong>Compute:</strong> Accuracy, precision, recall, F1-score<br>
+                        <strong>Generate:</strong> Confusion matrices and ROC curves<br>
+                        <strong>Output:</strong> performance_metrics.csv</p>
+                    </div>
+                    <div class="step">
+                        <h4>3. Performance Analysis</h4>
+                        <p><strong>Analyze:</strong> Performance across categories<br>
+                        <strong>Identify:</strong> Strengths and weaknesses<br>
+                        <strong>Output:</strong> Detailed performance analysis</p>
+                    </div>
+                    <div class="step">
+                        <h4>4. Report Generation</h4>
+                        <p><strong>Create:</strong> Comprehensive analysis reports<br>
+                        <strong>Include:</strong> Visualizations and insights<br>
+                        <strong>Output:</strong> Professional evaluation report</p>
+                    </div>
+                    <div class="step">
+                        <h4>5. Export Options</h4>
+                        <p><strong>Generate:</strong> CSV, JSON, and PDF exports<br>
+                        <strong>Include:</strong> Complete session data<br>
+                        <strong>Output:</strong> Multiple format exports</p>
+                    </div>
+                    <div class="step">
+                        <h4>6. Session Summary</h4>
+                        <p><strong>Create:</strong> Complete workflow documentation<br>
+                        <strong>Include:</strong> Reproducibility information<br>
+                        <strong>Output:</strong> Session summary report</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div id="models-sub" class="sub-flowchart">
+                <h3>Fine-tuned Models Output - Configuration Details</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>Model Configuration File</h4>
+                        <p><strong>Format:</strong> YAML configuration<br>
+                        <strong>Include:</strong> Base model, hyperparameters, training settings<br>
+                        <strong>Output:</strong> deployable_model_config.yaml</p>
+                    </div>
+                    <div class="step">
+                        <h4>Model Weights & Checkpoints</h4>
+                        <p><strong>Save:</strong> Fine-tuned model weights<br>
+                        <strong>Include:</strong> Training checkpoints<br>
+                        <strong>Output:</strong> model_weights.bin</p>
+                    </div>
+                    <div class="step">
+                        <h4>Training Metadata</h4>
+                        <p><strong>Document:</strong> Complete training history<br>
+                        <strong>Include:</strong> Performance logs and metrics<br>
+                        <strong>Output:</strong> training_metadata.json</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div id="analysis-sub" class="sub-flowchart">
+                <h3>Analysis Output - Configuration Details</h3>
+                <div class="sub-steps">
+                    <div class="step">
+                        <h4>Performance Metrics</h4>
+                        <p><strong>Calculate:</strong> Accuracy, precision, recall, F1-score<br>
+                        <strong>Generate:</strong> Confusion matrices and ROC curves<br>
+                        <strong>Output:</strong> performance_metrics.csv</p>
+                    </div>
+                    <div class="step">
+                        <h4>Visualizations</h4>
+                        <p><strong>Create:</strong> Performance charts and graphs<br>
+                        <strong>Include:</strong> Comparison plots and trend analysis<br>
+                        <strong>Output:</strong> performance_visualizations.html</p>
+                    </div>
+                    <div class="step">
+                        <h4>Comparative Analysis</h4>
+                        <p><strong>Compare:</strong> Different models and approaches<br>
+                        <strong>Analyze:</strong> Context Summary vs Traditional methods<br>
+                        <strong>Output:</strong> comparative_analysis_report.pdf</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="hideSubFlowchart()">Close</button>
+            </div>
+
+            <div class="legend">
+                <h3>Legend</h3>
+                <div class="legend-grid">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #e74c3c;"></div>
+                        <div class="legend-text">Input Layer</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #3498db;"></div>
+                        <div class="legend-text">Processing Layer</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #f39c12;"></div>
+                        <div class="legend-text">Model Layer</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: #9b59b6;"></div>
+                        <div class="legend-text">Output Layer</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showSubFlowchart(sectionId) {
+            // Hide all sub-flowcharts
+            const allSubs = document.querySelectorAll('.sub-flowchart');
+            allSubs.forEach(sub => sub.classList.remove('active'));
+            
+            // Remove clicked class from all nodes
+            const allNodes = document.querySelectorAll('.node');
+            allNodes.forEach(node => node.classList.remove('clicked'));
+            
+            // Show selected sub-flowchart
+            const selectedSub = document.getElementById(sectionId + '-sub');
+            if (selectedSub) {
+                selectedSub.classList.add('active');
+                
+                // Add clicked class to parent node
+                const parentNode = event.currentTarget;
+                parentNode.classList.add('clicked');
+                
+                // Scroll to sub-flowchart
+                selectedSub.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        function hideSubFlowchart() {
+            // Hide all sub-flowcharts
+            const allSubs = document.querySelectorAll('.sub-flowchart');
+            allSubs.forEach(sub => sub.classList.remove('active'));
+            
+            // Remove clicked class from all nodes
+            const allNodes = document.querySelectorAll('.node');
+            allNodes.forEach(node => node.classList.remove('clicked'));
+        }
+
+        function highlightLayer(layerType) {
+            clearHighlights();
+            
+            const layers = document.querySelectorAll('.layer');
+            layers.forEach(layer => layer.style.opacity = '0.3');
+            
+            if (layerType === 'input') {
+                document.querySelector('.input-layer').style.opacity = '1';
+            } else if (layerType === 'processing') {
+                document.querySelector('.processing-layer').style.opacity = '1';
+            } else if (layerType === 'model') {
+                document.querySelector('.model-layer').style.opacity = '1';
+            } else if (layerType === 'output') {
+                document.querySelector('.output-layer').style.opacity = '1';
+            }
+            
+            // Update button state
+            document.querySelectorAll('.control-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function clearHighlights() {
+            const layers = document.querySelectorAll('.layer');
+            layers.forEach(layer => layer.style.opacity = '1');
+            
+            document.querySelectorAll('.control-btn').forEach(btn => btn.classList.remove('active'));
+        }
+
+        function showFlowDiagram(diagramType) {
+            // Hide all flow diagrams
+            const allDiagrams = document.querySelectorAll('.flow-diagram-viewer');
+            allDiagrams.forEach(diagram => diagram.classList.remove('active'));
+            
+            // Show selected flow diagram
+            const selectedDiagram = document.getElementById(diagramType + '-flow');
+            if (selectedDiagram) {
+                selectedDiagram.classList.add('active');
+                selectedDiagram.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        // Add keyboard support
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                hideSubFlowchart();
+            }
+        });
+
+        // Add click outside to close
+        document.addEventListener('click', function(event) {
+            const subFlowcharts = document.querySelectorAll('.sub-flowchart');
+            const isClickInsideSub = Array.from(subFlowcharts).some(sub => sub.contains(event.target));
+            const isClickOnNode = event.target.closest('.node');
+            
+            if (!isClickInsideSub && !isClickOnNode) {
+                hideSubFlowchart();
+            }
+        });
+    </script>
+</body>
+</html> 
