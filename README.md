@@ -290,7 +290,3 @@ Category: Viral
 3. Ensure 90%+ test coverage
 4. Update documentation as needed
 
-
-## Support
-
-For issues and questions, please refer to the documentation in the `Docs/` folder or create an issue in the repository. 
