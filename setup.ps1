@@ -78,8 +78,17 @@ function Clean-Files {
 
 function Start-App {
     Write-Host "Starting EpiTuner application..." -ForegroundColor Yellow
+    
+    # Check if streamlit is available
+    $streamlitCheck = python -c "import streamlit" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: Streamlit not found!" -ForegroundColor Red
+        Write-Host "Please run: .\setup.ps1 install" -ForegroundColor Yellow
+        return
+    }
+    
     Write-Host "Open your browser to: http://localhost:8501" -ForegroundColor Cyan
-    streamlit run app.py
+    python -m streamlit run app.py
 }
 
 function Check-Dependencies {
