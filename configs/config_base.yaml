@@ -1,0 +1,75 @@
+# Base configuration for EpiTuner LoRA training
+# Optimized for consumer-grade GPUs (GTX 1660 Ti / RTX 3060 / RTX 4060 etc.)
+model:
+  name: "microsoft/DialoGPT-medium"  # Default model, will be overridden by user selection
+  max_seq_len: 256  # Reduced for consumer GPUs
+  trust_remote_code: false
+
+data:
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  shuffle: true
+  random_seed: 42
+
+train:
+  learning_rate: 3e-4  # Slightly higher for faster convergence
+  num_epochs: 2  # Reduced for faster training
+  batch_size: 1  # Conservative for consumer GPUs
+  gradient_accumulation_steps: 4  # Compensate for small batch size
+  warmup_ratio: 0.05  # Reduced warmup
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1e-8
+  max_grad_norm: 1.0
+  fp16: true  # Essential for consumer GPUs
+  bf16: false  # Not supported on older consumer GPUs
+  dataloader_num_workers: 0  # Avoid Windows multiprocessing issues
+  save_total_limit: 1  # Save disk space
+  evaluation_strategy: "steps"
+  eval_steps: 50  # More frequent evaluation
+  save_strategy: "steps"
+  save_steps: 50
+  logging_strategy: "steps"
+  logging_steps: 5
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  report_to: ["tensorboard"]
+
+tuning:
+  mode: "qlora"  # Essential for consumer GPUs
+  backend: "bnb"  # Most compatible with consumer hardware
+  target_modules: ["q_proj", "v_proj"]  # Reduced modules for memory efficiency
+  lora_r: 8  # Reduced rank for consumer GPUs
+  lora_alpha: 16  # Adjusted proportionally
+  lora_dropout: 0.05  # Reduced dropout
+  use_rslora: false
+  bias: "none"
+
+quantization:
+  enabled: true  # Can be disabled if BnB compatibility issues
+  load_in_4bit: true  # Essential for consumer GPUs
+  bnb_4bit_compute_dtype: "float16"
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true
+
+generation:
+  max_new_tokens: 128  # Reduced for memory efficiency
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
+  pad_token_id: null  # Will be set automatically
+
+confidence:
+  threshold: 0.7  # Minimum confidence for auto-acceptance
+  levels: ["Very Confident", "Confident", "Somewhat Confident", "Not Very Confident", "Not at all Confident"]
+
+# Consumer GPU memory guidelines
+memory_guidelines:
+  gtx_1660_ti: "4GB - Use TinyLlama models only"
+  rtx_3060: "8GB/12GB - Good for Phi-2, small Llama models"
+  rtx_4060: "8GB - Phi-2, Qwen-1.8B recommended"
+  rtx_4060_ti: "16GB - Can handle Llama-7B with QLoRA"

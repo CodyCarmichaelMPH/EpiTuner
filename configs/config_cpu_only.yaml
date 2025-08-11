@@ -1,0 +1,74 @@
+# CPU-only configuration for EpiTuner LoRA training
+# Use when no GPU is available - will be slow but functional
+model:
+  name: "microsoft/DialoGPT-small"  # Smaller model for CPU training
+  max_seq_len: 64  # Minimal sequence length for CPU
+  trust_remote_code: false
+
+data:
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  shuffle: true
+  random_seed: 42
+
+train:
+  learning_rate: 5e-4  # Slightly higher for faster convergence
+  num_epochs: 1  # Single epoch for CPU feasibility
+  batch_size: 1  # Must be 1 for CPU
+  gradient_accumulation_steps: 2  # Minimal accumulation
+  warmup_ratio: 0.0  # No warmup for CPU
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1e-8
+  max_grad_norm: 1.0
+  fp16: false  # CPU doesn't support fp16
+  bf16: false  # CPU doesn't support bf16
+  dataloader_num_workers: 0  # Essential for CPU and Windows
+  save_total_limit: 1  # Save disk space
+  evaluation_strategy: "no"  # Skip evaluation for speed
+  eval_steps: 500
+  save_strategy: "epoch"  # Save only at end
+  save_steps: 500
+  logging_strategy: "steps"
+  logging_steps: 50  # Less frequent logging
+  load_best_model_at_end: false  # Skip for speed
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  report_to: []  # No reporting for CPU
+
+tuning:
+  mode: "full"  # Full fine-tuning fallback for CPU (safer than LoRA with BnB issues)
+  backend: "none"  # No quantization backend
+  target_modules: ["q_proj", "v_proj"]  # Not used in full mode but kept for compatibility
+  lora_r: 2  # Not used in full mode
+  lora_alpha: 4  # Not used in full mode
+  lora_dropout: 0.0  # Not used in full mode
+  use_rslora: false
+  bias: "none"
+
+quantization:
+  enabled: false  # No quantization on CPU
+  load_in_4bit: false
+  bnb_4bit_compute_dtype: "float32"
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: false
+
+generation:
+  max_new_tokens: 32  # Very small for CPU
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
+  pad_token_id: null  # Will be set automatically
+
+confidence:
+  threshold: 0.7
+  levels: ["Very Confident", "Confident", "Somewhat Confident", "Not Very Confident", "Not at all Confident"]
+
+# CPU-specific optimizations
+cpu_optimization:
+  use_deterministic_algorithms: true
+  low_memory_mode: true
+  minimal_logging: true

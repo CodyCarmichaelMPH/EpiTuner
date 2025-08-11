@@ -1,313 +1,406 @@
-# EpiTuner - Ollama Fine-Tuning and Evaluation Suite
+# EpiTuner
 
-A comprehensive Python suite for fine-tuning and evaluating Ollama models with epidemiological data, featuring schema-guided evaluation and context-aware inference.
+**LoRA Fine-tuning Tool for Medical Data Classification**
 
-## System Flowcharts
+EpiTuner is a user-friendly application for fine-tuning language models on medical data using LoRA (Low-Rank Adaptation). It provides a complete workflow from data upload to model deployment, with a focus on PHI-safe local processing and expert-in-the-loop validation.
 
-### **Interactive HTML Flowchart** (Recommended)
-View the complete interactive system flowchart:
-- **Main Overview**: Click on any section to see detailed sub-processes
-- **Inputs & Outputs**: Each section shows what it needs and produces
-- **Detailed Steps**: Sub-flowcharts show the complete process for each component
+## Features
+
+- **Completely Local Processing** - All data stays on your machine (PHI-safe)
+- **Expert-in-the-Loop** - Review and correct model predictions
+- **Confidence Scoring** - Models provide confidence levels for predictions
+- **Easy Ollama Integration** - Deploy trained models with Ollama
+- **Memory Efficient** - QLoRA training on consumer GPUs
+- **Comprehensive Evaluation** - Detailed metrics and visualizations
+- **User-Friendly GUI** - Streamlit-based interface
+
+## Quick Start
+
+### 1. Installation
 
 ```bash
-# Open in your browser
-start flowcharts.html
-# or double-click the file
+# Clone the repository
+git clone <repository-url>
+cd EpiTuner
+
+# Install dependencies
+make install
+
+# Create directory structure
+make setup
+
+# Check dependencies
+make check-deps
 ```
 
-### **Detailed Mermaid Flowcharts**
-For advanced viewing with Mermaid support:
-- **[Master Flowchart](Documentation/master_flowchart.md)**: Complete pipeline overview
-- **[Flowchart Index](Documentation/flowchart_index.md)**: All available flowcharts
+### 2. Run the Application
 
-## Project Overview
+```bash
+# Start the Streamlit GUI
+make run-app
+```
 
-EpiTuner is designed to handle medical datasets with expert ratings, providing tools for:
-- Dataset loading and validation
-- Schema mapping and normalization
-- Context bundling for LLM training
-- Fine-tuning and inference with Ollama
-- Comprehensive evaluation and debugging
+Open your browser to `http://localhost:8501` to access the EpiTuner interface.
+
+### 3. Using the GUI
+
+1. **Data Upload** - Upload your CSV file with medical records
+2. **Model Selection** - Choose from your local Ollama models
+3. **Configuration** - Set training parameters and confidence thresholds
+4. **Training** - Fine-tune your LoRA model
+5. **Expert Review** - Review and correct model predictions
+6. **Export** - Download your trained model and results
+
+## Data Format
+
+Your CSV file should include these columns:
+
+### Required Columns
+- `C_Biosense_ID` - Unique identifier for each record
+- `ChiefComplaintOrig` - Chief complaints (separated by ;)
+- `DischargeDiagnosis` - Discharge diagnosis
+- `Expert Rating` - "Match", "Not a Match", or "Unknown/Not able to determine"
+- `Rationale_of_Rating` - Expert's reasoning for the rating
+
+### Optional but Recommended
+- `Sex` - Patient sex
+- `Age` - Patient age
+- `c_ethnicity` - Ethnicity
+- `c_race` - Race
+- `Admit_Reason_Combo` - Admission reasons
+- `Diagnosis_Combo` - Diagnosis codes with descriptors
+- `CCDD Category` - CCDD categories (separated by ;)
+- `TriageNotes` or `TriageNotesOrig` - Triage notes
+
+### Sample Data
+
+A sample dataset is provided in `sample_data/medical_sample.csv` for testing purposes.
+
+## Model Support
+
+EpiTuner works with models available in your local Ollama installation:
+
+### Recommended Models
+- **llama2** - Good general performance
+- **mistral** - Efficient and accurate
+- **phi** - Fast training, good for testing
+- **qwen** - Strong medical domain performance
+
+### Install Ollama Models
+
+```bash
+# Install Ollama (visit https://ollama.ai)
+ollama pull llama2
+ollama pull mistral
+ollama pull phi
+```
+
+## Command Line Usage
+
+For advanced users, EpiTuner provides command-line tools:
+
+### Training
+
+```bash
+make train DATA=sample_data/medical_sample.csv \
+           MODEL=microsoft/phi-2 \
+           TOPIC="motor vehicle collision detection" \
+           OUTPUT=outputs/mvc_model
+```
+
+### Inference
+
+```bash
+make infer MODEL=outputs/mvc_model \
+           CONFIG=configs/config_base.yaml \
+           DATA=new_data.csv \
+           TOPIC="motor vehicle collision detection" \
+           OUTPUT=outputs/predictions.json
+```
+
+### Evaluation
+
+```bash
+make eval PREDICTIONS=outputs/predictions.json \
+          GROUND_TRUTH=sample_data/medical_sample.csv \
+          OUTPUT_DIR=outputs/evaluation
+```
 
 ## Project Structure
 
 ```
 EpiTuner/
-├── Docs/
-│   ├── master_functional_overview.txt
-│   ├── .cursorrules
-│   └── queries/
-│       ├── 01_data_loader_query.txt
-│       ├── 02_schema_mapper_query.txt
-│       ├── 03_formatter_promptbuilder_query.txt
-│       ├── 04_inference_runner_query.txt
-│       ├── 05_fine_tuner_query.txt
-│       ├── 06_contextualizer_query.txt
-│       ├── 07_debugging_logger_query.txt
-│       ├── 08_gui_query.txt
-│       └── 09_formatter_query.txt
+├── app.py                      # Main Streamlit application
+├── requirements.txt            # Python dependencies
+├── Makefile                   # Automation commands
+├── configs/
+│   └── config_base.yaml       # Training configuration
 ├── scripts/
-│   ├── data_loader.py          # Implemented
-│   ├── schema_mapper.py        # Implemented
-│   ├── formatter_promptbuilder.py # Implemented
-│   ├── inference_runner.py     # Next
-│   ├── fine_tuner.py           # Planned
-│   ├── contextualizer.py       # Planned
-│   ├── debugging_logger.py     # Planned
-│   └── utils.py                # Planned
-├── gui/
-│   └── app.py                  # Planned
-├── tests/
-│   ├── test_data_loader.py     # Implemented
-│   ├── test_schema_mapper.py   # Implemented
-│   ├── test_formatter_promptbuilder.py # Implemented
-│   ├── test_inference_runner.py # Next
-│   └── test_fine_tuner.py      # Planned
-├── data/
-│   └── sample_dataset.csv      # Created
-├── outputs/                    # Generated during processing
-├── requirements.txt            # Created
-└── README.md                   # This file
+│   ├── train.py               # Training script
+│   ├── inference.py           # Inference script
+│   └── evaluate.py            # Evaluation script
+├── chat_templates/
+│   └── medical_classification.jinja  # Chat template
+├── sample_data/
+│   └── medical_sample.csv     # Sample dataset
+├── outputs/                   # Training outputs
+├── data/                      # User data
+└── adapters/                  # LoRA adapters
 ```
 
-## Current Status: Complete EpiTuner Suite with Context Summary and Dynamic Model Selection
+## Configuration
 
-### What's Implemented
+### Training Parameters
 
-1. **Data Loader Module** (`scripts/data_loader.py`)
-   - CSV file loading with error handling
-   - Schema validation against expected fields
-   - Data cleaning and type casting
-   - Missing value handling
-   - Context block creation for LLM training
-   - Rating standardization preparation
-   - Comprehensive logging and debugging
+Key configuration options in `configs/config_base.yaml`:
 
-2. **Schema Mapper Module** (`scripts/schema_mapper.py`)
-   - Rating standardization and normalization
-   - Automatic mapping suggestions based on common patterns
-   - Custom user-defined mapping support
-   - Validation and error handling
-   - Metadata storage for reproducibility
-   - Integration with data loader
+```yaml
+model:
+  max_seq_len: 512             # Maximum sequence length
 
-3. **Formatter Module** (`scripts/formatter.py`) - **ENHANCED**
-   - **Context Summary Approach**: Extract key patterns from training data
-   - **Pattern-Based Evaluation**: "Look for respiratory symptoms: fever, cough, etc."
-   - **Transfer Learning**: Patterns transfer to new case evaluation
-   - **Traditional Prompts**: Individual case prompts for fine-tuning
-   - **Smart Context Creation**: Automatic pattern extraction and summarization
-   - **Multiple Output Formats**: CSV, JSONL, metadata with context summaries
+train:
+  learning_rate: 2e-4          # Learning rate
+  num_epochs: 3                # Number of training epochs
+  batch_size: "auto"           # Automatic batch sizing
 
-4. **GUI Interface** (`gui/epituner_gui.py`) - **NEW**
-   - **Clean Interface**: Modern, intuitive design
-   - **Dynamic Model Selection**: Dropdown with all available Ollama models
-   - **Context Summary Integration**: Default prompt formatting approach
-   - **Low Power Mode**: Optimized for tablet/limited hardware
-   - **Step-by-Step Workflow**: Intuitive navigation through all processes
+tuning:
+  mode: "qlora"                # LoRA mode (qlora/lora/full)
+  lora_r: 16                   # LoRA rank
+  lora_alpha: 32               # LoRA alpha
+  lora_dropout: 0.1            # LoRA dropout
 
-5. **Complete Integration Pipeline**
-   - Seamless data flow from raw CSV to LLM-ready prompts
-   - Context Summary approach for efficient pattern-based evaluation
-   - Dynamic model selection and configuration
-   - Comprehensive integration testing
-   - Performance optimization for large datasets
-   - Complete error handling and logging
+confidence:
+  threshold: 0.7               # Auto-approval threshold
+```
 
-5. **Unit Tests** 
-   - `tests/test_data_loader.py` (25 tests, all passing)
-   - `tests/test_schema_mapper.py` (14 tests, all passing)
-   - `tests/test_formatter_promptbuilder.py` (16 tests, all passing)
-   - Integration tests (3 test suites, all passing)
+### Confidence Levels
 
-5. **Sample Dataset** (`data/sample_dataset.csv`)
-   - 10-row sample with all required fields
-   - Varied expert ratings (0, 1, 2)
-   - Realistic medical scenarios
+The system provides five confidence levels:
+- **Very Confident** - Model is highly certain
+- **Confident** - Model is reasonably certain  
+- **Somewhat Confident** - Model has moderate certainty
+- **Not Very Confident** - Model has low certainty
+- **Not at all Confident** - Model is very uncertain
 
-6. **Comprehensive Documentation**
-   - **Data Loader**: `Documentation/data_loader/` (4 files)
-   - **Schema Mapper**: `Documentation/schema_mapper/` (1 file)
-   - **Formatter PromptBuilder**: `Documentation/formatter_promptbuilder/` (3 files)
-   - **Integration Guide**: `Documentation/integration_guide.md`
-   - **Complete function-by-function breakdowns**
-   - **Quick reference guides**
-   - **Process flow diagrams**
-   - **Implementation summaries**
+## Ollama Integration
 
-### Expected Dataset Schema
+Once training is complete, integrate your model with Ollama:
 
-The data loader expects CSV files with the following schema:
+### 1. Save LoRA Adapter
 
-**Required Fields:**
-- `C_BioSense_ID` (string) - Unique patient identifier
-- `ChiefComplaintOrig` (string) - Original chief complaint
-- `Discharge Diagnosis` (string) - Final diagnosis
-- `Sex` (string) - Patient sex
-- `Age` (integer) - Patient age
-- `Admit_Reason_Combo` (string) - Admission reason
-- `Chief_Complaint_Combo` (string) - Combined chief complaint
-- `Diagnosis_Combo` (string) - Combined diagnosis
-- `CCDD` (string) - CCDD code
-- `CCDDCategory` (string) - CCDD category
-- `TriageNotes` (string) - Triage notes
-- `Expert Rating` (integer/string) - Expert assessment rating
+Download the LoRA adapter from the GUI or copy from `outputs/`.
 
-**Optional Fields:**
-- `Rationale of Rating` (string) - Expert's reasoning
+### 2. Create Modelfile
 
-## Installation
+```dockerfile
+FROM llama2
+ADAPTER ./adapter_model.safetensors
 
-1. Clone the repository:
+TEMPLATE """{{ if .System }}{{ .System }}
+
+{{ end }}{{ .Prompt }}"""
+
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+```
+
+### 3. Create Ollama Model
+
 ```bash
-git clone <repository-url>
-cd EpiTuner
+ollama create epituner-medical -f ./Modelfile
 ```
 
-2. Install dependencies:
+### 4. Use Your Model
+
 ```bash
-pip install -r requirements.txt
+# Interactive
+ollama run epituner-medical "Classify this medical record..."
+
+# API
+curl http://localhost:11434/api/generate \
+  -d '{"model": "epituner-medical", "prompt": "Your medical record here..."}'
 ```
 
-## Usage
+## Evaluation Metrics
 
-### Basic Data Loader Usage
+EpiTuner provides comprehensive evaluation metrics:
+
+### Classification Metrics
+- **Accuracy** - Overall correctness
+- **Precision** - True positives / (True positives + False positives)
+- **Recall** - True positives / (True positives + False negatives)
+- **F1-Score** - Harmonic mean of precision and recall
+
+### Confidence Analysis
+- **Calibration** - How well confidence scores match actual accuracy
+- **Distribution** - Breakdown of predictions by confidence level
+- **Agreement Rate** - Model-expert agreement by confidence
+
+### Visualizations
+- Confusion matrices
+- Confidence calibration plots
+- Performance trends
+
+## Troubleshooting
+
+### Common Issues
+
+#### CUDA Out of Memory (Common on Consumer GPUs)
+```bash
+# Step 1: Use consumer GPU config
+CONFIG=configs/config_consumer_gpu.yaml
+
+# Step 2: Reduce LoRA rank
+lora_r: 4  # Instead of 8 or 16
+
+# Step 3: Use smaller model
+MODEL=TinyLlama/TinyLlama-1.1B-Chat-v1.0
+
+# Step 4: Close other applications
+# - Close Chrome/browsers
+# - Close games or GPU-heavy apps
+# - Check Task Manager GPU usage
+```
+
+#### Ollama Models Not Found
+```bash
+# Check Ollama installation
+make check-ollama
+
+# Install models
+ollama pull llama2
+```
+
+#### Training Slow (Windows Consumer GPU)
+```bash
+# Use consumer GPU optimized config
+CONFIG=configs/config_consumer_gpu.yaml
+
+# Use smaller dataset for testing
+head -20 your_data.csv > small_data.csv
+
+# Optimize for consumer GPU
+num_epochs: 1
+lora_r: 4
+max_seq_len: 128
+
+# Windows-specific optimization
+dataloader_num_workers: 0  # Avoid multiprocessing issues
+```
+
+### System Requirements
+
+**Windows 10/11 with Consumer GPU Setup:**
+- **GPU**: NVIDIA GTX 1660 Ti / RTX 3060 / RTX 4060 or better
+  - 4GB VRAM minimum (TinyLlama only)
+  - 6-8GB VRAM recommended (Phi-2, small models)
+  - 12GB+ VRAM ideal (larger models)
+- **RAM**: 16GB+ system RAM
+- **Storage**: 10GB+ free space for models and outputs
+- **Python**: 3.8+ (3.11 recommended)
+- **CUDA**: NVIDIA drivers 11.8+ (download from nvidia.com)
+
+## Advanced Usage
+
+### Custom Chat Templates
+
+Modify `chat_templates/medical_classification.jinja` to customize how data is formatted for training:
+
+```jinja
+Medical Record Classification
+
+Task: {{ classification_topic }}
+
+Record: {{ chief_complaint }}
+Diagnosis: {{ discharge_diagnosis }}
+
+Classification: {{ classification }}
+Confidence: {{ confidence }}
+Rationale: {{ rationale }}
+```
+
+### Custom Configurations
+
+Create new configuration files in `configs/` for different use cases:
+
+```yaml
+# configs/rapid_training.yaml
+train:
+  num_epochs: 1
+  learning_rate: 5e-4
+
+tuning:
+  lora_r: 8
+  lora_alpha: 16
+```
+
+### Batch Processing
+
+Process multiple datasets programmatically:
 
 ```python
-from scripts.data_loader import DataLoader
+from scripts.train import LoRATrainer
+from scripts.inference import MedicalClassificationInference
 
-# Initialize data loader
-loader = DataLoader(debug_mode=True)
-
-# Process dataset
-df, unique_ratings, metadata = loader.process_dataset("data/sample_dataset.csv")
-
-# Print results
-print(f"Processed {len(df)} rows")
-print(f"Unique ratings: {unique_ratings}")
-print(f"Metadata: {metadata}")
+# Train multiple models
+datasets = ['mvc_data.csv', 'fall_data.csv', 'cardiac_data.csv']
+for dataset in datasets:
+    # Training logic here
+    pass
 ```
-
-### With Rating Standardization
-
-```python
-# Define rating mapping
-rating_mapping = {
-    1: 1,    # 1 = Match
-    2: 0,    # 2 = Does Not Match  
-    0: -1    # 0 = Unknown
-}
-
-# Process with mapping
-df, unique_ratings, metadata = loader.process_dataset(
-    "data/sample_dataset.csv", 
-    rating_mapping=rating_mapping
-)
-
-# Save results
-loader.save_processed_dataset(df, "outputs/processed_dataset.csv")
-loader.save_metadata(metadata, "outputs/processing_metadata.json")
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest tests/
-
-# Run specific test file
-pytest tests/test_data_loader.py
-
-# Run with verbose output
-pytest tests/test_data_loader.py -v
-
-# Run with coverage
-pytest tests/test_data_loader.py --cov=scripts.data_loader
-```
-
-## Data Loader Features
-
-### 1. Schema Validation
-- Validates presence of all required fields
-- Suggests column mappings for missing fields
-- Handles common field name variations
-
-### 2. Data Cleaning
-- Handles missing values appropriately
-- Type casting (Age to integer, Expert Rating handling)
-- Drops rows with missing C_BioSense_ID
-
-### 3. Context Block Creation
-- Merges key text fields into structured context
-- Format: Patient info + Medical details
-- Ready for LLM training and inference
-
-### 4. Rating Standardization
-- Extracts unique rating values
-- Supports user-defined mapping to standard values
-- Handles mixed rating types gracefully
-
-### 5. Error Handling
-- FileError: File not found or unreadable
-- SchemaError: Missing required fields
-- DataTypeError: Type conversion failures
-- Comprehensive logging for debugging
-
-## Output Format
-
-The processed dataset includes:
-- All original columns
-- `Context_Block`: Merged text context for LLM
-- `Standardized_Rating`: Mapped rating values (-1 for unmapped)
-
-Example context block:
-```
-Age: 25
-Sex: M
-Chief Complaint: Fever
-Discharge Diagnosis: Viral infection
-Triage Notes: High fever with chills
-Admit Reason: Fever
-Chief Complaint Combo: Fever
-Diagnosis Combo: Infection
-CCDD: Fever
-Category: Viral
-```
-
-## Next Steps
-
-1. **Schema Mapper Implementation** (Next)
-   - Interactive rating mapping
-   - GUI for user input
-   - Validation and error handling
-
-2. **Formatter & Prompt Builder**
-   - Context optimization
-   - Prompt template creation
-   - Training data preparation
-
-3. **Inference Runner**
-   - Ollama model integration
-   - Batch processing
-   - Result formatting
-
-4. **Fine-Tuner**
-   - Model fine-tuning pipeline
-   - .gguf file generation
-   - Training validation
 
 ## Contributing
 
-1. Follow the coding standards in `Docs/.cursorrules`
-2. Write unit tests for all new functionality
-3. Ensure 90%+ test coverage
-4. Update documentation as needed
+We welcome contributions! Please see our contribution guidelines for details.
+
+### Development Setup (Windows)
+
+```bash
+# Install development dependencies
+make dev-install
+
+# Check Windows environment
+make windows-check
+
+# Setup Windows directories
+make windows-setup
+
+# Format code
+make format
+
+# Run linting
+make lint
+```
 
 ## License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Support
 
-For issues and questions, please refer to the documentation in the `Docs/` folder or create an issue in the repository. 
+For support and questions:
+
+1. Check the troubleshooting section above
+2. Review the sample data and configurations
+3. Open an issue on GitHub
+4. Contact the development team
+
+## Roadmap
+
+### Version 0.2
+- [ ] Support for additional model architectures
+- [ ] Automated hyperparameter tuning
+- [ ] Multi-label classification support
+- [ ] Integration with more deployment platforms
+
+### Version 0.3
+- [ ] Federated learning capabilities
+- [ ] Advanced active learning strategies
+- [ ] Real-time model monitoring
+- [ ] Advanced data preprocessing tools
+
+---
+
+**EpiTuner** - Making medical AI accessible, reliable, and privacy-preserving.
+
+*Built for the medical AI community*
