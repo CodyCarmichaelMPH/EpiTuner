@@ -66,19 +66,13 @@ function Clean-Files {
     Write-Host "Cleaning up generated files..." -ForegroundColor Yellow
     
     # Remove training outputs
-    if (Test-Path "outputs\training_*") {
-        Remove-Item "outputs\training_*" -Recurse -Force
-    }
+    Get-ChildItem -Path "outputs" -Filter "training_*" -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
     
     # Remove prediction outputs
-    if (Test-Path "outputs\predictions_*") {
-        Remove-Item "outputs\predictions_*" -Recurse -Force
-    }
+    Get-ChildItem -Path "outputs" -Filter "predictions_*" -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
     
     # Remove evaluation outputs
-    if (Test-Path "outputs\evaluation_*") {
-        Remove-Item "outputs\evaluation_*" -Recurse -Force
-    }
+    Get-ChildItem -Path "outputs" -Filter "evaluation_*" -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
     
     # Remove Python cache
     if (Test-Path "__pycache__") {
@@ -90,8 +84,8 @@ function Clean-Files {
     }
     
     # Remove .pyc files
-    Get-ChildItem -Path . -Recurse -Filter "*.pyc" | Remove-Item -Force
-    Get-ChildItem -Path . -Recurse -Filter "*.pyo" | Remove-Item -Force
+    Get-ChildItem -Path . -Recurse -Filter "*.pyc" -ErrorAction SilentlyContinue | Remove-Item -Force
+    Get-ChildItem -Path . -Recurse -Filter "*.pyo" -ErrorAction SilentlyContinue | Remove-Item -Force
     
     Write-Host "Cleanup complete!" -ForegroundColor Green
 }
@@ -106,35 +100,40 @@ function Check-Dependencies {
     Write-Host "Checking system dependencies..." -ForegroundColor Yellow
     
     # Check Python
-    try {
-        $pythonVersion = python --version 2>&1
-        Write-Host "✓ $pythonVersion" -ForegroundColor Green
-    } catch {
+    $pythonCheck = python --version 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✓ Python: $pythonCheck" -ForegroundColor Green
+    } else {
         Write-Host "✗ Python not found!" -ForegroundColor Red
-        exit 1
+        return
     }
     
     # Check pip
-    try {
-        $pipVersion = pip --version 2>&1
+    $pipCheck = pip --version 2>&1
+    if ($LASTEXITCODE -eq 0) {
         Write-Host "✓ pip available" -ForegroundColor Green
-    } catch {
+    } else {
         Write-Host "✗ pip not found!" -ForegroundColor Red
-        exit 1
+        return
     }
     
     # Check Python packages
     Write-Host "Checking Python packages..." -ForegroundColor Yellow
     
-    $packages = @("torch", "transformers", "streamlit", "pandas", "numpy")
-    foreach ($package in $packages) {
-        try {
-            $result = python -c "import $package; print(f'$package: {$package.__version__}')" 2>&1
-            Write-Host "✓ $result" -ForegroundColor Green
-        } catch {
-            Write-Host "✗ $package not installed!" -ForegroundColor Red
-        }
-    }
+    python -c "import torch; print('torch: OK')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ torch: OK" -ForegroundColor Green } else { Write-Host "✗ torch not installed!" -ForegroundColor Red }
+    
+    python -c "import transformers; print('transformers: OK')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ transformers: OK" -ForegroundColor Green } else { Write-Host "✗ transformers not installed!" -ForegroundColor Red }
+    
+    python -c "import streamlit; print('streamlit: OK')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ streamlit: OK" -ForegroundColor Green } else { Write-Host "✗ streamlit not installed!" -ForegroundColor Red }
+    
+    python -c "import pandas; print('pandas: OK')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ pandas: OK" -ForegroundColor Green } else { Write-Host "✗ pandas not installed!" -ForegroundColor Red }
+    
+    python -c "import numpy; print('numpy: OK')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ numpy: OK" -ForegroundColor Green } else { Write-Host "✗ numpy not installed!" -ForegroundColor Red }
     
     Write-Host "Dependency check complete!" -ForegroundColor Green
 }
@@ -142,18 +141,17 @@ function Check-Dependencies {
 function Check-Ollama {
     Write-Host "Checking Ollama installation..." -ForegroundColor Yellow
     
-    try {
-        $ollamaVersion = ollama --version 2>&1
-        Write-Host "✓ Ollama: $ollamaVersion" -ForegroundColor Green
+    $ollamaCheck = ollama --version 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✓ Ollama: $ollamaCheck" -ForegroundColor Green
         
         Write-Host "Available Ollama models:" -ForegroundColor Cyan
         ollama list
-    } catch {
+    } else {
         Write-Host "✗ Ollama not found! Install from https://ollama.ai" -ForegroundColor Red
         Write-Host "After installing Ollama, try:" -ForegroundColor Yellow
         Write-Host "  ollama pull llama3.2:1b    # Small model for limited hardware"
         Write-Host "  ollama pull phi3           # Good general model"
-        exit 1
     }
 }
 
@@ -161,7 +159,7 @@ function Start-Training {
     if ([string]::IsNullOrEmpty($Data) -or [string]::IsNullOrEmpty($Model) -or [string]::IsNullOrEmpty($Topic) -or [string]::IsNullOrEmpty($Output)) {
         Write-Host "Usage: .\setup.ps1 train -Data <csv_file> -Model <model_name> -Topic <classification_topic> -Output <output_dir>" -ForegroundColor Red
         Write-Host "Example: .\setup.ps1 train -Data 'sample_data\medical_sample.csv' -Model 'microsoft/phi-2' -Topic 'motor vehicle collisions' -Output 'outputs\mvc_model'" -ForegroundColor Yellow
-        exit 1
+        return
     }
     
     Write-Host "Training LoRA model..." -ForegroundColor Yellow
@@ -176,7 +174,7 @@ function Start-Inference {
     if ([string]::IsNullOrEmpty($Model) -or [string]::IsNullOrEmpty($Config) -or [string]::IsNullOrEmpty($Data) -or [string]::IsNullOrEmpty($Topic) -or [string]::IsNullOrEmpty($Output)) {
         Write-Host "Usage: .\setup.ps1 infer -Model <model_path> -Config <config_path> -Data <csv_file> -Topic <topic> -Output <output_json>" -ForegroundColor Red
         Write-Host "Example: .\setup.ps1 infer -Model 'outputs\mvc_model' -Config 'configs\config_base.yaml' -Data 'sample_data\medical_sample.csv' -Topic 'motor vehicle collisions' -Output 'outputs\predictions.json'" -ForegroundColor Yellow
-        exit 1
+        return
     }
     
     Write-Host "Running inference..." -ForegroundColor Yellow
@@ -187,7 +185,7 @@ function Start-Evaluation {
     if ([string]::IsNullOrEmpty($Predictions) -or [string]::IsNullOrEmpty($GroundTruth) -or [string]::IsNullOrEmpty($OutputDir)) {
         Write-Host "Usage: .\setup.ps1 eval -Predictions <predictions_json> -GroundTruth <ground_truth_csv> -OutputDir <output_directory>" -ForegroundColor Red
         Write-Host "Example: .\setup.ps1 eval -Predictions 'outputs\predictions.json' -GroundTruth 'sample_data\medical_sample.csv' -OutputDir 'outputs\evaluation'" -ForegroundColor Yellow
-        exit 1
+        return
     }
     
     Write-Host "Evaluating model..." -ForegroundColor Yellow
