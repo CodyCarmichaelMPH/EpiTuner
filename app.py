@@ -147,29 +147,70 @@ class GPUManager:
                         'mistralai/Mistral-7B-Instruct-v0.1'
                     ]
             else:
-                # No CUDA - check what hardware we have
+                # No CUDA detected by PyTorch - check what hardware we actually have
+                nvidia_detected = False
                 try:
+                    # Check ALL video controllers and prioritize NVIDIA if found
                     result = subprocess.run(['powershell', '-Command', 
                         'Get-WmiObject -Class Win32_VideoController | Select-Object Name, AdapterRAM'], 
                         capture_output=True, text=True)
+                    
+                    intel_found = False
+                    amd_found = False
+                    
                     if result.returncode == 0:
                         lines = result.stdout.strip().split('\n')
+                        
+                        # First pass: Look specifically for NVIDIA
                         for line in lines[2:]:  # Skip header
-                            if line.strip() and 'intel' in line.lower():
-                                gpu_info['gpu_name'] = 'Intel Integrated Graphics'
-                                gpu_info['hardware_type'] = 'integrated_gpu'
+                            if line.strip() and 'nvidia' in line.lower():
+                                nvidia_detected = True
+                                # Extract the actual GPU name
+                                gpu_name_parts = [part for part in line.split() if part.strip()]
+                                if gpu_name_parts:
+                                    # Find the GPU name (skip RAM column)
+                                    gpu_name_clean = ' '.join(gpu_name_parts[:-1]) if len(gpu_name_parts) > 1 else gpu_name_parts[0]
+                                    gpu_info['gpu_name'] = f"{gpu_name_clean} (CUDA unavailable to PyTorch)"
+                                else:
+                                    gpu_info['gpu_name'] = "NVIDIA GPU detected (CUDA unavailable to PyTorch)"
+                                
+                                gpu_info['hardware_type'] = 'nvidia_gpu_no_cuda'
+                                gpu_info['training_feasible'] = True
+                                gpu_info['warnings'] = [
+                                    'NVIDIA GPU detected but PyTorch cannot access CUDA',
+                                    'You likely have PyTorch CPU-only version installed',
+                                    'Run: .\\setup.ps1 upgrade-torch to install CUDA-enabled PyTorch',
+                                    'Training will use CPU mode (very slow) until fixed'
+                                ]
+                                # Conservative recommendations since we can't detect VRAM  
+                                gpu_info['recommended_models'] = [
+                                    'TinyLlama/TinyLlama-1.1B-Chat-v1.0',
+                                    'microsoft/phi-2',
+                                    'microsoft/DialoGPT-small'
+                                ]
                                 break
-                            elif line.strip() and any(brand in line.lower() for brand in ['amd', 'radeon']):
-                                gpu_info['gpu_name'] = 'AMD Graphics'
-                                gpu_info['hardware_type'] = 'amd_gpu'
-                                break
+                        
+                        # If no NVIDIA found, check for others
+                        if not nvidia_detected:
+                            for line in lines[2:]:  # Skip header
+                                if line.strip():
+                                    if 'intel' in line.lower():
+                                        intel_found = True
+                                        gpu_info['gpu_name'] = 'Intel Integrated Graphics'
+                                        gpu_info['hardware_type'] = 'integrated_gpu'
+                                    elif any(brand in line.lower() for brand in ['amd', 'radeon']):
+                                        amd_found = True
+                                        gpu_info['gpu_name'] = 'AMD Graphics'
+                                        gpu_info['hardware_type'] = 'amd_gpu'
                 except:
                     pass
                 
-                # CPU-only fallback - provide basic options
-                gpu_info['recommended_models'] = [
-                    'microsoft/DialoGPT-small',  # Very small model for CPU
-                    'TinyLlama/TinyLlama-1.1B-Chat-v1.0'  # If user wants to try
+                # If no NVIDIA was detected, fall back to CPU recommendations
+                if not nvidia_detected:
+                    # CPU-only fallback - provide basic options
+                    gpu_info['recommended_models'] = [
+                        'microsoft/DialoGPT-small',  # Very small model for CPU
+                        'TinyLlama/TinyLlama-1.1B-Chat-v1.0'  # If user wants to try
                 ]
                 gpu_info['config_file'] = 'configs/config_cpu_only.yaml'
                 gpu_info['training_feasible'] = True  # Allow CPU training
@@ -211,9 +252,13 @@ class OllamaModelManager:
     @staticmethod
     def model_to_hf_name(ollama_model: str) -> str:
         """Convert Ollama model name to Hugging Face model name"""
-        # Mapping optimized for consumer GPUs
+        # Normalize the model name for matching
+        model_lower = ollama_model.lower()
+        
+        # Expanded mapping optimized for consumer GPUs and medical models
         model_mapping = {
             'llama3.2:1b': 'meta-llama/Llama-3.2-1B-Instruct',
+            'llama3.2': 'meta-llama/Llama-3.2-1B-Instruct',
             'llama2': 'meta-llama/Llama-2-7b-chat-hf',
             'mistral': 'mistralai/Mistral-7B-Instruct-v0.1',
             'phi3': 'microsoft/Phi-3-mini-4k-instruct',
@@ -226,9 +271,28 @@ class OllamaModelManager:
         if ollama_model in model_mapping:
             return model_mapping[ollama_model]
         
-        # Try partial matches
+        # Special handling for phi models (including medical variants)
+        if 'phi' in model_lower:
+            if 'phi3' in model_lower or 'phi-3' in model_lower:
+                return 'microsoft/Phi-3-mini-4k-instruct'
+            else:
+                return 'microsoft/phi-2'
+        
+        # Special handling for llama models
+        if 'llama' in model_lower:
+            if '3.2' in model_lower or '1b' in model_lower:
+                return 'meta-llama/Llama-3.2-1B-Instruct'
+            else:
+                return 'meta-llama/Llama-2-7b-chat-hf'
+        
+        # Special handling for medical or specialized models
+        if any(keyword in model_lower for keyword in ['medical', 'med', 'clinical', 'health']):
+            # For medical models, default to phi-2 which is good for specialized tasks
+            return 'microsoft/phi-2'
+        
+        # Try partial matches with original mapping
         for ollama_key, hf_name in model_mapping.items():
-            if ollama_model.startswith(ollama_key):
+            if ollama_key in model_lower:
                 return hf_name
         
         # Default fallback - safe for consumer GPUs
@@ -458,6 +522,24 @@ def step_model_selection():
             st.info("Good for small-medium models. Phi-2 recommended.")
         else:
             st.success("Sufficient VRAM for most models.")
+    elif gpu_info['hardware_type'] == 'nvidia_gpu_no_cuda':
+        st.warning(f"⚠️ {gpu_info['gpu_name']}")
+        st.error("**Issue:** NVIDIA GPU found but PyTorch cannot access CUDA")
+        st.info("**Solution:** Run `.\setup.ps1 upgrade-torch` to install CUDA-enabled PyTorch")
+        
+        with st.expander("Why is this happening?"):
+            st.markdown("""
+            **Your system has an NVIDIA GPU but PyTorch can't use it because:**
+            1. You have the CPU-only version of PyTorch installed
+            2. CUDA drivers may not be properly configured
+            
+            **To fix this:**
+            1. Run `.\setup.ps1 upgrade-torch` to install CUDA-enabled PyTorch
+            2. Or use `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121`
+            3. Restart the application after upgrading
+            
+            **Note:** Training will work in CPU mode but will be much slower.
+            """)
     else:
         st.error(f"❌ No NVIDIA GPU: {gpu_info['gpu_name']}")
         
