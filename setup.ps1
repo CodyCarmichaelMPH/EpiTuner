@@ -15,6 +15,7 @@ function Show-Help {
     Write-Host "  run-app       Start Streamlit application"
     Write-Host "  check-deps    Check system dependencies"
     Write-Host "  check-ollama  Check Ollama installation and models"
+    Write-Host "  upgrade-torch Check and upgrade PyTorch to compatible version"
     Write-Host ""
     Write-Host "Quick start:" -ForegroundColor Green
     Write-Host "  .\setup.ps1 install"
@@ -150,7 +151,10 @@ function Check-Ollama {
     }
 }
 
-
+function Upgrade-Torch {
+    Write-Host "Checking PyTorch compatibility..." -ForegroundColor Yellow
+    python upgrade_torch.py
+}
 
 # Main command dispatcher
 switch ($Command.ToLower()) {
@@ -161,6 +165,7 @@ switch ($Command.ToLower()) {
     "run-app" { Start-App }
     "check-deps" { Check-Dependencies }
     "check-ollama" { Check-Ollama }
+    "upgrade-torch" { Upgrade-Torch }
     default {
         Write-Host "Unknown command: $Command" -ForegroundColor Red
         Write-Host "Use '.\setup.ps1 help' for available commands" -ForegroundColor Yellow
