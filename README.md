@@ -18,7 +18,7 @@ EpiTuner is a user-friendly application for fine-tuning language models on medic
 
 ### 1. Installation
 
-**Windows (PowerShell - Recommended):**
+**Windows:**
 ```powershell
 # Clone the repository
 git clone https://github.com/CodyCarmichaelMPH/EpiTuner.git
@@ -30,20 +30,6 @@ cd EpiTuner
 
 # Check dependencies
 .\setup.ps1 check-deps
-```
-
-**Windows (Command Prompt):**
-```cmd
-# Clone the repository
-git clone https://github.com/CodyCarmichaelMPH/EpiTuner.git
-cd EpiTuner
-
-# Install dependencies and setup
-setup.bat install
-setup.bat setup
-
-# Check dependencies
-setup.bat check-deps
 ```
 
 **Linux/macOS:**
@@ -66,11 +52,7 @@ make check-deps
 
 **Windows:**
 ```powershell
-# PowerShell
 .\setup.ps1 run-app
-
-# Or Command Prompt
-setup.bat run-app
 ```
 
 **Linux/macOS:**

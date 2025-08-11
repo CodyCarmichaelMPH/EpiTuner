@@ -45,17 +45,7 @@ Download from [git-scm.com](https://git-scm.com) if you want to clone the reposi
 .\setup.ps1 run-app
 ```
 
-### Option 2: Batch Script (cmd.exe)
-```cmd
-# Install dependencies and set up directories
-setup.bat install
-setup.bat setup
-
-# Start the application  
-setup.bat run-app
-```
-
-### Option 3: Manual Setup
+### Option 2: Manual Setup
 ```cmd
 # Install dependencies
 pip install -r requirements.txt
@@ -70,9 +60,8 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 streamlit run app.py
 ```
 
-## Windows Scripts Usage
+## PowerShell Script Usage
 
-### PowerShell Script Commands
 ```powershell
 # See all available commands
 .\setup.ps1 help
@@ -87,21 +76,6 @@ streamlit run app.py
 # Advanced: Train models via command line
 .\setup.ps1 train -Data "sample_data\medical_sample.csv" -Model "microsoft/phi-2" -Topic "motor vehicle collisions" -Output "outputs\mvc_model"
 ```
-
-### Batch Script Commands
-```cmd
-# See all available commands
-setup.bat help
-
-# Check system compatibility  
-setup.bat check-deps
-setup.bat check-ollama
-
-# Clean up generated files
-setup.bat clean
-```
-
-**Note:** PowerShell script offers more features than the batch version. For advanced usage, prefer `setup.ps1`.
 
 ## Consumer GPU Optimization
 
