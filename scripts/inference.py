@@ -32,7 +32,7 @@ sys.path.insert(0, str(project_root))
 
 # Import new modules for scoring and rationale
 from epituner.inference_scoring import score_labels, pick_label
-from epituner.rationale import extract_evidence, rationale_prompt
+from epituner.rationale import extract_evidence, rationale_prompt, create_fallback_rationale
 
 
 def load_temperature() -> float:
@@ -331,7 +331,10 @@ Please provide your classification in the following format:
             
             # Score the labels using the new approach
             scores = score_labels(self.model, self.tokenizer, prompt_text, labels=("Match", "Not a Match"))
+            print(f"Debug: Raw scores = {scores}")
+            
             label, confidence, unknown = pick_label(scores, tau=0.15, temperature=temperature)
+            print(f"Debug: Label = {label}, Confidence = {confidence}, Unknown = {unknown}")
             
             if unknown:
                 label = "Unknown/Not able to determine"
@@ -339,32 +342,41 @@ Please provide your classification in the following format:
             # Generate rationale using quoted evidence
             evidence = extract_evidence(record)
             rationale_label = label if label != "Unknown/Not able to determine" else "Unknown"
-            prompt = rationale_prompt(evidence, rationale_label)
             
-            # Generate rationale (deterministic and short)
-            rationale_inputs = self.tokenizer(prompt, return_tensors="pt")
-            if torch.cuda.is_available():
-                rationale_inputs = {k: v.cuda() for k, v in rationale_inputs.items()}
+            # Try to generate rationale with model
+            rationale = None
+            try:
+                prompt = rationale_prompt(evidence, rationale_label)
+                rationale_inputs = self.tokenizer(prompt, return_tensors="pt")
+                if torch.cuda.is_available():
+                    rationale_inputs = {k: v.cuda() for k, v in rationale_inputs.items()}
+                
+                with torch.no_grad():
+                    rationale_outputs = self.model.generate(
+                        **rationale_inputs,
+                        max_new_tokens=100,
+                        do_sample=False,  # deterministic
+                        temperature=0.1,  # Very low temperature for focused output
+                        pad_token_id=self.tokenizer.eos_token_id
+                    )
+                
+                rationale_text = self.tokenizer.decode(
+                    rationale_outputs[0][rationale_inputs['input_ids'].shape[1]:], 
+                    skip_special_tokens=True
+                ).strip()
+                
+                # Check if the generated text looks like a proper rationale (not instructions)
+                if (rationale_text and 
+                    len(rationale_text) > 20 and 
+                    not rationale_text.lower().startswith(('you will', 'write', 'facts you may', 'paraphrase'))):
+                    rationale = rationale_text
+                    
+            except Exception as e:
+                print(f"Warning: Rationale generation failed: {e}")
             
-            with torch.no_grad():
-                rationale_outputs = self.model.generate(
-                    **rationale_inputs,
-                    max_new_tokens=120,
-                    do_sample=False,  # deterministic
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
-            
-            rationale_text = self.tokenizer.decode(
-                rationale_outputs[0][rationale_inputs['input_ids'].shape[1]:], 
-                skip_special_tokens=True
-            ).strip()
-            
-            # Extract just the rationale content (remove any leftover prompt parts)
-            rationale_lines = [line.strip() for line in rationale_text.split('\n') if line.strip()]
-            if rationale_lines:
-                rationale = '\n'.join(rationale_lines)
-            else:
-                rationale = f"Classification: {label} based on available evidence."
+            # Use fallback if generation failed or returned instructions
+            if not rationale:
+                rationale = create_fallback_rationale(evidence, rationale_label)
             
             # Convert confidence to percentage and level
             confidence_score = confidence
