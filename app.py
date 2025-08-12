@@ -1347,11 +1347,19 @@ def run_real_inference():
         st.error(f"Model files not found at {model_path}. Please ensure training completed successfully.")
         return []
     
-    # Check for essential model files
-    required_files = ['pytorch_model.bin', 'config.json', 'tokenizer.json']
-    missing_files = [f for f in required_files if not os.path.exists(os.path.join(model_path, f))]
-    if missing_files:
-        st.error(f"Missing essential model files: {missing_files}. Training may have failed.")
+    # Check for essential model files (LoRA adapters or full models)
+    # First check for LoRA adapter files
+    lora_files = ['adapter_model.safetensors', 'adapter_config.json']
+    lora_missing = [f for f in lora_files if not os.path.exists(os.path.join(model_path, f))]
+    
+    # Also check for full model files as fallback
+    full_model_files = ['pytorch_model.bin', 'config.json']
+    full_model_missing = [f for f in full_model_files if not os.path.exists(os.path.join(model_path, f))]
+    
+    # If we have neither LoRA nor full model files, error
+    if len(lora_missing) > 0 and len(full_model_missing) > 0:
+        st.error(f"Missing essential model files. Expected either LoRA adapter files {lora_files} or full model files {full_model_files}. Training may have failed.")
+        st.info(f"Files found in {model_path}: {os.listdir(model_path) if os.path.exists(model_path) else 'Directory not found'}")
         return []
     
     try:
