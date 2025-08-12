@@ -813,22 +813,22 @@ def step_training_config():
             
             st.markdown(f"**Memory Need:** {memory_usage}")
         
-        st.markdown("### Windows Tips")
+        st.markdown("### Training Tips")
         st.markdown("""
-        **For Consumer GPUs:**
-        - Start with 1-2 epochs
-        - Use Task Manager to monitor GPU
-        - Close Chrome/games before training
+        **For Optimal Performance:**
+        - Start with 1-2 epochs for initial testing
+        - Monitor system resources during training
+        - Close resource-intensive applications before training
         
         **If Out of Memory:**
         - Reduce LoRA rank to 4
-        - Use TinyLlama model
-        - Close other applications
+        - Use smaller models (TinyLlama)
+        - Free up system memory by closing unnecessary applications
         
         **For Best Results:**
         - Train in short iterations
-        - Review after each training
-        - Use expert feedback loop
+        - Review results after each training
+        - Use expert feedback loop for improvement
         """)
 
 
@@ -1241,8 +1241,8 @@ def real_training(data_path: str, config_path: str, output_dir: str):
                 st.markdown("""
                 1. Try using a smaller model (DialoGPT-small)
                 2. Restart Streamlit: `streamlit run app.py`
-                3. Close other applications to free memory
-                4. Check Windows Task Manager for resource usage
+                3. Free up system memory by closing unnecessary applications
+                4. Monitor system resource usage
                 """)
             
             st.session_state.training_in_progress = False
@@ -1271,9 +1271,9 @@ def real_training(data_path: str, config_path: str, output_dir: str):
             st.info("💡 **Recommended actions:**")
             st.markdown("""
             1. **Restart the application**: Close browser and run `streamlit run app.py` again
-            2. **Close other applications**: Free up system resources
+            2. **Free up system resources**: Close unnecessary applications
             3. **Try a smaller model**: Use DialoGPT-small for testing
-            4. **Check system resources**: Use Task Manager to monitor RAM/CPU usage
+            4. **Monitor system resources**: Check RAM/CPU usage
             """)
             
         except:
@@ -1933,7 +1933,7 @@ process_csv_file('my_medical_data.csv', 'classified_results.csv')
 - Consider retraining with more examples if needed
 
 ### Memory issues
-- If Ollama runs out of memory, close other applications
+- If Ollama runs out of memory, free up system resources
 - Consider using a smaller base model for future training
 
 ## Model Information
