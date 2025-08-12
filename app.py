@@ -1166,12 +1166,29 @@ def real_training(data_path: str, config_path: str, output_dir: str):
                 with open(metrics_path, 'r') as f:
                     training_metrics = json.load(f)
                 
-                # Check if essential model files exist
+                # Check if essential model files exist (handle both regular and LoRA models)
                 essential_files = ['pytorch_model.bin', 'config.json']
-                missing_files = [f for f in essential_files if not (Path(output_dir) / f).exists()]
+                lora_files = ['adapter_model.safetensors', 'adapter_config.json']
                 
-                if missing_files:
-                    st.error(f"Training completed but essential model files are missing: {missing_files}")
+                # Check for regular model files in main directory
+                missing_regular = [f for f in essential_files if not (Path(output_dir) / f).exists()]
+                
+                # Check for LoRA adapter files in main directory
+                missing_lora_main = [f for f in lora_files if not (Path(output_dir) / f).exists()]
+                
+                # Check for LoRA adapter files in lora_adapter subdirectory
+                lora_adapter_dir = Path(output_dir) / 'lora_adapter'
+                missing_lora_subdir = [f for f in lora_files if not (lora_adapter_dir / f).exists()]
+                
+                # Check if we have either regular model files OR LoRA files (in either location)
+                has_regular_model = len(missing_regular) == 0
+                has_lora_model = len(missing_lora_main) == 0 or len(missing_lora_subdir) == 0
+                
+                if not has_regular_model and not has_lora_model:
+                    st.error(f"Training completed but essential model files are missing.")
+                    st.info(f"Missing regular model files: {missing_regular}")
+                    st.info(f"Missing LoRA adapter files in main dir: {missing_lora_main}")
+                    st.info(f"Missing LoRA adapter files in subdir: {missing_lora_subdir}")
                     st.info("This may indicate the training process was interrupted or failed to save properly.")
                     st.session_state.training_in_progress = False
                     return
@@ -1184,6 +1201,12 @@ def real_training(data_path: str, config_path: str, output_dir: str):
                     'config_path': config_path,
                     'training_metrics': training_metrics
                 }
+                
+                # Add debugging information about what files exist
+                if os.path.exists(output_dir):
+                    existing_files = os.listdir(output_dir)
+                    print(f"Files in output directory: {existing_files}")
+                    results['debug_files'] = existing_files
                 
                 # Run real inference to get actual predictions and metrics
                 predictions = run_real_inference()
