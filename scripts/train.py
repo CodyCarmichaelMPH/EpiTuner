@@ -208,14 +208,18 @@ class LoRATrainer:
         print(f"Loading model: {model_name}")
         
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=self.config['model']['trust_remote_code']
-        )
-        
-        # Add padding token if it doesn't exist
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                trust_remote_code=self.config['model']['trust_remote_code']
+            )
+            
+            # Add padding token if it doesn't exist
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+        except Exception as e:
+            print(f"Error loading tokenizer: {e}")
+            raise e
         
         # Setup quantization config for QLoRA - with improved compatibility handling
         quantization_config = None
@@ -336,6 +340,14 @@ class LoRATrainer:
             total_params = sum(p.numel() for p in self.model.parameters())
             print(f"Trainable params: {trainable_params:,} || All params: {total_params:,} || Trainable%: {100 * trainable_params / total_params:.2f}")
             print("Warning: Full fine-tuning uses more memory and may be slower")
+        
+        # Move model to GPU if available
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
+            print(f"Model moved to GPU: {torch.cuda.get_device_name()}")
+            print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB")
+        else:
+            print("No GPU available, using CPU")
     
     def tokenize_dataset(self, dataset: Dataset) -> Dataset:
         """Tokenize the dataset"""
@@ -395,117 +407,136 @@ class LoRATrainer:
     
     def train(self, dataset: Dataset, output_dir: str, model_name: str = None, ollama_name: str = None) -> str:
         """Main training function"""
-        # Tokenize dataset
-        tokenized_dataset = self.tokenize_dataset(dataset)
-        
-        # Split dataset
-        dataset_splits = self.split_dataset(tokenized_dataset)
-        
-        # Setup training arguments with version compatibility
-        training_kwargs = {
-            'output_dir': output_dir,
-            'learning_rate': self.config['train']['learning_rate'],
-            'num_train_epochs': self.config['train']['num_epochs'],
-            'per_device_train_batch_size': 1 if self.config['train']['batch_size'] == 'auto' else self.config['train']['batch_size'],
-            'per_device_eval_batch_size': 1,
-            'gradient_accumulation_steps': 8 if self.config['train']['gradient_accumulation_steps'] == 'auto' else self.config['train']['gradient_accumulation_steps'],
-            'warmup_ratio': self.config['train']['warmup_ratio'],
-            'weight_decay': self.config['train']['weight_decay'],
-            'logging_steps': self.config['train']['logging_steps'],
-            'eval_strategy': self.config['train']['evaluation_strategy'],
-            'eval_steps': self.config['train']['eval_steps'],
-            'save_strategy': self.config['train']['save_strategy'],
-            'save_steps': self.config['train']['save_steps'],
-            'load_best_model_at_end': self.config['train']['load_best_model_at_end'],
-            'metric_for_best_model': self.config['train']['metric_for_best_model'],
-            'greater_is_better': self.config['train']['greater_is_better'],
-            'fp16': self.config['train']['fp16'],
-            'bf16': self.config['train']['bf16'],
-            'dataloader_num_workers': self.config['train']['dataloader_num_workers'],
-            'save_total_limit': self.config['train']['save_total_limit'],
-            'remove_unused_columns': False,
-        }
-        
-        # Add report_to only if supported (newer transformers versions)
         try:
-            from transformers import __version__ as transformers_version
-            import packaging.version
-            if packaging.version.parse(transformers_version) >= packaging.version.parse("4.21.0"):
-                training_kwargs['report_to'] = self.config['train']['report_to']
-        except (ImportError, AttributeError):
-            # Fallback if version check fails
-            pass
-        
-        training_args = TrainingArguments(**training_kwargs)
-        
-        # Data collator
-        data_collator = DataCollatorForLanguageModeling(
-            tokenizer=self.tokenizer,
-            mlm=False,
-        )
-        
-        # Initialize trainer
-        self.trainer = Trainer(
-            model=self.model,
-            args=training_args,
-            train_dataset=dataset_splits['train'],
-            eval_dataset=dataset_splits['validation'],
-            data_collator=data_collator,
-            compute_metrics=self.compute_metrics,
-        )
-        
-        # Train
-        print("Starting training...")
-        train_result = self.trainer.train()
-        
-        # Save the model and LoRA adapter
-        print("Saving model and LoRA adapter...")
-        self.trainer.save_model()
-        self.tokenizer.save_pretrained(output_dir)
-        
-        # Save LoRA adapter separately if using LoRA/QLoRA
-        if self.config['tuning']['mode'] in ['qlora', 'lora'] and HAS_PEFT:
+            # Tokenize dataset
+            print("Tokenizing dataset...")
+            tokenized_dataset = self.tokenize_dataset(dataset)
+            
+            # Split dataset
+            print("Splitting dataset...")
+            dataset_splits = self.split_dataset(tokenized_dataset)
+            
+            print(f"Dataset splits: Train={len(dataset_splits['train'])}, Val={len(dataset_splits['validation'])}, Test={len(dataset_splits['test'])}")
+            
+            # Setup training arguments with version compatibility
+            training_kwargs = {
+                'output_dir': output_dir,
+                'learning_rate': self.config['train']['learning_rate'],
+                'num_train_epochs': self.config['train']['num_epochs'],
+                'per_device_train_batch_size': 1 if self.config['train']['batch_size'] == 'auto' else self.config['train']['batch_size'],
+                'per_device_eval_batch_size': 1,
+                'gradient_accumulation_steps': 8 if self.config['train']['gradient_accumulation_steps'] == 'auto' else self.config['train']['gradient_accumulation_steps'],
+                'warmup_ratio': self.config['train']['warmup_ratio'],
+                'weight_decay': self.config['train']['weight_decay'],
+                'logging_steps': self.config['train']['logging_steps'],
+                'eval_strategy': self.config['train']['evaluation_strategy'],
+                'eval_steps': self.config['train']['eval_steps'],
+                'save_strategy': self.config['train']['save_strategy'],
+                'save_steps': self.config['train']['save_steps'],
+                'load_best_model_at_end': self.config['train']['load_best_model_at_end'],
+                'metric_for_best_model': self.config['train']['metric_for_best_model'],
+                'greater_is_better': self.config['train']['greater_is_better'],
+                'fp16': self.config['train']['fp16'],
+                'bf16': self.config['train']['bf16'],
+                'dataloader_num_workers': self.config['train']['dataloader_num_workers'],
+                'save_total_limit': self.config['train']['save_total_limit'],
+                'remove_unused_columns': False,
+            }
+            
+            # Add report_to only if supported (newer transformers versions)
             try:
-                from peft import PeftModel
-                # Save the LoRA adapter
-                lora_output_dir = os.path.join(output_dir, 'lora_adapter')
-                self.model.save_pretrained(lora_output_dir)
-                print(f"LoRA adapter saved to: {lora_output_dir}")
-                
-                # Create Ollama-compatible model if requested
-                if ollama_name:
-                    self._create_ollama_model(ollama_name, output_dir, lora_output_dir)
+                from transformers import __version__ as transformers_version
+                import packaging.version
+                if packaging.version.parse(transformers_version) >= packaging.version.parse("4.21.0"):
+                    training_kwargs['report_to'] = self.config['train']['report_to']
+            except (ImportError, AttributeError):
+                # Fallback if version check fails
+                pass
+            
+            training_args = TrainingArguments(**training_kwargs)
+            
+            # Data collator
+            data_collator = DataCollatorForLanguageModeling(
+                tokenizer=self.tokenizer,
+                mlm=False,
+            )
+            
+            # Initialize trainer
+            self.trainer = Trainer(
+                model=self.model,
+                args=training_args,
+                train_dataset=dataset_splits['train'],
+                eval_dataset=dataset_splits['validation'],
+                data_collator=data_collator,
+                compute_metrics=self.compute_metrics,
+            )
+            
+            # Train
+            print("Starting training...")
+            train_result = self.trainer.train()
+            
+            # Save the model and LoRA adapter
+            print("Saving model and LoRA adapter...")
+            self.trainer.save_model()
+            self.tokenizer.save_pretrained(output_dir)
+            
+            # Save LoRA adapter separately if using LoRA/QLoRA
+            if self.config['tuning']['mode'] in ['qlora', 'lora'] and HAS_PEFT:
+                try:
+                    from peft import PeftModel
+                    # Save the LoRA adapter
+                    lora_output_dir = os.path.join(output_dir, 'lora_adapter')
+                    self.model.save_pretrained(lora_output_dir)
+                    print(f"LoRA adapter saved to: {lora_output_dir}")
                     
-            except Exception as e:
-                print(f"Warning: Could not save LoRA adapter separately: {e}")
-        
-        # Save model metadata
-        model_metadata = {
-            'model_name': model_name or 'epituner_medical_lora',
-            'ollama_name': ollama_name or model_name or 'epituner_medical_lora',
-            'training_mode': self.config['tuning']['mode'],
-            'base_model': self.config['model']['name'],
-            'classification_topic': self.config.get('classification_topic', ''),
-            'train_loss': train_result.training_loss,
-            'train_runtime': train_result.metrics['train_runtime'],
-            'train_samples_per_second': train_result.metrics['train_samples_per_second'],
-        }
-        
-        # Evaluate on test set
-        if len(dataset_splits['test']) > 0:
-            eval_result = self.trainer.evaluate(dataset_splits['test'])
-            model_metadata.update({f'test_{k}': v for k, v in eval_result.items()})
-        
-        # Save metadata
-        with open(os.path.join(output_dir, 'model_metadata.json'), 'w') as f:
-            json.dump(model_metadata, f, indent=2)
-        
-        print(f"Training completed. Model saved to: {output_dir}")
-        print(f"Model name: {model_metadata['model_name']}")
-        if ollama_name:
-            print(f"Ollama model name: {ollama_name}")
-        
-        return output_dir
+                    # Create Ollama-compatible model if requested
+                    if ollama_name:
+                        self._create_ollama_model(ollama_name, output_dir, lora_output_dir)
+                        
+                except Exception as e:
+                    print(f"Warning: Could not save LoRA adapter separately: {e}")
+            
+            # Save model metadata
+            model_metadata = {
+                'model_name': model_name or 'epituner_medical_lora',
+                'ollama_name': ollama_name or model_name or 'epituner_medical_lora',
+                'training_mode': self.config['tuning']['mode'],
+                'base_model': self.config['model']['name'],
+                'classification_topic': self.config.get('classification_topic', ''),
+                'train_loss': train_result.training_loss,
+                'train_runtime': train_result.metrics['train_runtime'],
+                'train_samples_per_second': train_result.metrics['train_samples_per_second'],
+            }
+            
+            # Evaluate on test set
+            if len(dataset_splits['test']) > 0:
+                eval_result = self.trainer.evaluate(dataset_splits['test'])
+                model_metadata.update({f'test_{k}': v for k, v in eval_result.items()})
+            
+            # Save metadata
+            with open(os.path.join(output_dir, 'model_metadata.json'), 'w') as f:
+                json.dump(model_metadata, f, indent=2)
+            
+            print(f"Training completed. Model saved to: {output_dir}")
+            print(f"Model name: {model_metadata['model_name']}")
+            if ollama_name:
+                print(f"Ollama model name: {ollama_name}")
+            
+            return output_dir
+            
+        except Exception as e:
+            print(f"Error during training: {e}")
+            # Save partial results if possible
+            try:
+                if hasattr(self, 'trainer') and self.trainer:
+                    print("Attempting to save partial model...")
+                    self.trainer.save_model()
+                    self.tokenizer.save_pretrained(output_dir)
+                    print(f"Partial model saved to: {output_dir}")
+            except Exception as save_error:
+                print(f"Could not save partial model: {save_error}")
+            
+            raise e
     
     def _create_ollama_model(self, ollama_name: str, output_dir: str, lora_adapter_dir: str):
         """Create Ollama-compatible model files"""

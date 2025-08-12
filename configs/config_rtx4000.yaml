@@ -1,0 +1,87 @@
+# Configuration for NVIDIA RTX 4000 (8GB VRAM)
+# Optimized for professional workstation GPU
+model:
+  name: "microsoft/DialoGPT-medium"  # Default model, will be overridden by user selection
+  max_seq_len: 512  # Good for 8GB VRAM
+  trust_remote_code: false
+
+data:
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  shuffle: true
+  random_seed: 42
+
+train:
+  learning_rate: 2e-4  # Conservative for stable training
+  num_epochs: 3  # Good balance for RTX 4000
+  batch_size: 1  # Conservative for 8GB VRAM
+  gradient_accumulation_steps: 8  # Compensate for small batch size
+  warmup_ratio: 0.1  # Standard warmup
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1e-8
+  max_grad_norm: 1.0
+  fp16: true  # Essential for RTX 4000
+  bf16: false  # Not supported on RTX 4000
+  dataloader_num_workers: 0  # Avoid Windows multiprocessing issues
+  save_total_limit: 2  # Save some checkpoints
+  evaluation_strategy: "steps"
+  eval_steps: 50  # Frequent evaluation
+  save_strategy: "steps"
+  save_steps: 100
+  logging_strategy: "steps"
+  logging_steps: 10
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  report_to: ["tensorboard"]
+
+tuning:
+  mode: "qlora"  # Essential for RTX 4000
+  backend: "bnb"  # Most compatible with RTX 4000
+  target_modules: ["q_proj", "v_proj", "k_proj"]  # More modules for better performance
+  lora_r: 16  # Good rank for RTX 4000
+  lora_alpha: 32  # Adjusted proportionally
+  lora_dropout: 0.05  # Standard dropout
+  use_rslora: false
+  bias: "none"
+
+quantization:
+  enabled: true  # Essential for RTX 4000
+  load_in_4bit: true
+  bnb_4bit_compute_dtype: "float16"
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true
+
+generation:
+  max_new_tokens: 128  # Good for RTX 4000
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
+  pad_token_id: null  # Will be set automatically
+
+confidence:
+  threshold: 0.7
+  levels: ["Very Confident", "Confident", "Somewhat Confident", "Not Very Confident", "Not at all Confident"]
+
+# RTX 4000 specific optimizations
+memory_optimization:
+  gradient_checkpointing: true
+  use_cache: false
+  low_cpu_mem_usage: true
+  max_memory: {0: "7GB"}  # Leave 1GB for system
+
+# RTX 4000 capabilities
+gpu_info:
+  name: "NVIDIA RTX 4000"
+  memory_gb: 8
+  compute_capability: "7.5"
+  recommended_models: [
+    "microsoft/phi-2",
+    "Qwen/Qwen1.5-1.8B-Chat",
+    "microsoft/DialoGPT-medium",
+    "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+  ]

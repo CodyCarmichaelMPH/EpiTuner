@@ -152,50 +152,91 @@ class SyndromicSurveillanceClassificationInference:
         """Load the trained model and tokenizer"""
         print(f"Loading model from: {self.model_path}")
         
+        # Check if model directory exists
+        if not self.model_path.exists():
+            raise FileNotFoundError(f"Model directory not found: {self.model_path}")
+        
         # Get base model name from config or infer from adapter
         base_model_name = self.config.get('model', {}).get('name', 'microsoft/DialoGPT-medium')
         
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            base_model_name,
-            trust_remote_code=self.config.get('model', {}).get('trust_remote_code', False)
-        )
-        
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                base_model_name,
+                trust_remote_code=self.config.get('model', {}).get('trust_remote_code', False)
+            )
+            
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+        except Exception as e:
+            print(f"Error loading tokenizer: {e}")
+            # Try loading from model directory
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    str(self.model_path),
+                    trust_remote_code=self.config.get('model', {}).get('trust_remote_code', False)
+                )
+                if self.tokenizer.pad_token is None:
+                    self.tokenizer.pad_token = self.tokenizer.eos_token
+            except Exception as e2:
+                raise Exception(f"Failed to load tokenizer from both base model and model directory: {e2}")
         
         # Setup quantization for inference if needed
         quantization_config = None
         if self.config.get('tuning', {}).get('mode') == 'qlora':
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True
-            )
+            try:
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_use_double_quant=True
+                )
+            except Exception as e:
+                print(f"Warning: Could not setup quantization: {e}")
+                quantization_config = None
         
         # Load base model
         model_kwargs = {
             'trust_remote_code': self.config.get('model', {}).get('trust_remote_code', False),
-            'torch_dtype': torch.float16,
+            'torch_dtype': torch.float16 if torch.cuda.is_available() else torch.float32,
         }
         
         if quantization_config:
             model_kwargs['quantization_config'] = quantization_config
             model_kwargs['device_map'] = 'auto'
         
-        base_model = AutoModelForCausalLM.from_pretrained(base_model_name, **model_kwargs)
+        try:
+            base_model = AutoModelForCausalLM.from_pretrained(base_model_name, **model_kwargs)
+        except Exception as e:
+            print(f"Error loading base model: {e}")
+            # Try loading from model directory
+            try:
+                base_model = AutoModelForCausalLM.from_pretrained(str(self.model_path), **model_kwargs)
+            except Exception as e2:
+                raise Exception(f"Failed to load model from both base model and model directory: {e2}")
         
         # Load LoRA adapter if it exists
         adapter_path = self.model_path
         if (adapter_path / "adapter_model.safetensors").exists() or (adapter_path / "adapter_model.bin").exists():
             print("Loading LoRA adapter...")
-            self.model = PeftModel.from_pretrained(base_model, str(adapter_path))
+            try:
+                self.model = PeftModel.from_pretrained(base_model, str(adapter_path))
+            except Exception as e:
+                print(f"Warning: Could not load LoRA adapter: {e}")
+                print("Using base model without adapter...")
+                self.model = base_model
         else:
             print("No LoRA adapter found, using base model")
             self.model = base_model
         
         self.model.eval()
+        
+        # Move to GPU if available
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
+            print(f"Model moved to GPU: {torch.cuda.get_device_name()}")
+        else:
+            print("No GPU available, using CPU")
     
     def _load_template(self):
         """Load the chat template"""
@@ -225,13 +266,13 @@ class SyndromicSurveillanceClassificationInference:
         """Format a syndromic surveillance record for inference"""
         # Prepare the content
         content = {
-            'chief_complaint': record.get('ChiefComplaintOrig', ''),
-            'discharge_diagnosis': record.get('DischargeDiagnosis', ''),
-            'demographics': f"Sex: {record.get('Sex', '')}, Age: {record.get('Age', '')}, Ethnicity: {record.get('c_ethnicity', '')}, Race: {record.get('c_race', '')}",
-            'admit_reason': record.get('Admit_Reason_Combo', ''),
-            'diagnosis_combo': record.get('Diagnosis_Combo', ''),
-            'ccdd_category': record.get('CCDD Category', ''),
-            'triage_notes': record.get('TriageNotes', record.get('TriageNotesOrig', ''))
+            'chief_complaint': record.get('chief_complaint', record.get('ChiefComplaintOrig', '')),
+            'discharge_diagnosis': record.get('discharge_diagnosis', record.get('DischargeDiagnosis', '')),
+            'demographics': record.get('demographics', f"Sex: {record.get('Sex', '')}, Age: {record.get('Age', '')}, Ethnicity: {record.get('c_ethnicity', '')}, Race: {record.get('c_race', '')}"),
+            'admit_reason': record.get('admit_reason', record.get('Admit_Reason_Combo', '')),
+            'diagnosis_combo': record.get('diagnosis_combo', record.get('Diagnosis_Combo', '')),
+            'ccdd_category': record.get('ccdd_category', record.get('CCDD Category', '')),
+            'triage_notes': record.get('triage_notes', record.get('TriageNotes', record.get('TriageNotesOrig', '')))
         }
         
         # Create user message
@@ -251,59 +292,73 @@ class SyndromicSurveillanceClassificationInference:
     def predict_single(self, record: Dict[str, Any], classification_topic: str) -> Dict[str, Any]:
         """Make prediction for a single syndromic surveillance record"""
         
-        # Format the input
-        input_text = self.format_record(record, classification_topic)
-        
-        # Tokenize
-        inputs = self.tokenizer(
-            input_text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=self.config.get('model', {}).get('max_seq_len', 512),
-            padding=True
-        )
-        
-        # Move to device
-        if torch.cuda.is_available():
-            inputs = {k: v.cuda() for k, v in inputs.items()}
-        
-        # Generate response
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=self.config.get('generation', {}).get('max_new_tokens', 256),
-                temperature=self.config.get('generation', {}).get('temperature', 0.7),
-                top_p=self.config.get('generation', {}).get('top_p', 0.9),
-                do_sample=True,
-                pad_token_id=self.tokenizer.eos_token_id,
-                return_dict_in_generate=True,
-                output_scores=True
-            )
-        
-        # Decode the generated text
-        generated_ids = outputs.sequences[0][inputs['input_ids'].shape[1]:]
-        generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        
-        # Calculate confidence
-        if hasattr(outputs, 'scores') and outputs.scores:
-            # Stack all logits
-            all_logits = torch.stack(outputs.scores, dim=0)  # [seq_len, batch_size, vocab_size]
-            all_logits = all_logits[:, 0, :]  # Remove batch dimension
+        try:
+            # Format the input
+            input_text = self.format_record(record, classification_topic)
             
-            confidence_score = ConfidenceCalculator.calculate_combined_confidence(
-                all_logits, generated_ids
+            # Tokenize
+            inputs = self.tokenizer(
+                input_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.config.get('model', {}).get('max_seq_len', 512),
+                padding=True
             )
-        else:
-            confidence_score = 0.5  # Default if no scores available
-        
-        # Parse the generated response
-        parsed_response = self._parse_response(generated_text)
-        
-        # Add confidence information
-        parsed_response['confidence_score'] = confidence_score
-        parsed_response['confidence_level'] = ConfidenceCalculator.confidence_to_level(confidence_score)
-        
-        return parsed_response
+            
+            # Move to device
+            if torch.cuda.is_available():
+                inputs = {k: v.cuda() for k, v in inputs.items()}
+            
+            # Generate response
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=self.config.get('generation', {}).get('max_new_tokens', 256),
+                    temperature=self.config.get('generation', {}).get('temperature', 0.7),
+                    top_p=self.config.get('generation', {}).get('top_p', 0.9),
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    return_dict_in_generate=True,
+                    output_scores=True
+                )
+            
+            # Decode the generated text
+            generated_ids = outputs.sequences[0][inputs['input_ids'].shape[1]:]
+            generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+            
+            # Calculate confidence
+            if hasattr(outputs, 'scores') and outputs.scores:
+                # Stack all logits
+                all_logits = torch.stack(outputs.scores, dim=0)  # [seq_len, batch_size, vocab_size]
+                all_logits = all_logits[:, 0, :]  # Remove batch dimension
+                
+                confidence_score = ConfidenceCalculator.calculate_combined_confidence(
+                    all_logits, generated_ids
+                )
+            else:
+                confidence_score = 0.5  # Default if no scores available
+            
+            # Parse the generated response
+            parsed_response = self._parse_response(generated_text)
+            
+            # Add confidence information
+            parsed_response['confidence_score'] = confidence_score
+            parsed_response['confidence_level'] = ConfidenceCalculator.confidence_to_level(confidence_score)
+            
+            return parsed_response
+            
+        except Exception as e:
+            print(f"Error during prediction: {e}")
+            # Return a safe fallback response
+            return {
+                'classification': 'Unknown/Not able to determine',
+                'confidence': 'Not at all Confident',
+                'confidence_score': 0.0,
+                'confidence_level': 'Not at all Confident',
+                'rationale': f'Error during prediction: {str(e)}',
+                'raw_response': '',
+                'error': str(e)
+            }
     
     def _parse_response(self, response_text: str) -> Dict[str, Any]:
         """Parse the model's response to extract classification, confidence, and rationale"""
