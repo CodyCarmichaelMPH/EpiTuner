@@ -1,4 +1,4 @@
-# epituner/rationale.py
+# epituner/rationale.py (tight prompt; new chat context each time)
 from typing import Dict, List
 
 def extract_evidence(record: Dict) -> List[str]:
@@ -15,13 +15,18 @@ def extract_evidence(record: Dict) -> List[str]:
                 out.append(f'[{k}] "{txt}"')
     return out[:6]  # keep it tight
 
-def rationale_prompt(evidence_quotes: List[str], decided_label: str) -> str:
-    evidence_block = "\n".join(f"- {q}" for q in evidence_quotes)
-    return (
-        f"Based on these medical record excerpts:\n{evidence_block}\n\n"
-        f"Classification: {decided_label}\n"
-        f"Rationale:"
+def build_rationale_messages(evidence_quotes, decided_label):
+    sys = "You explain clinical decisions using only the provided quotes. Do not invent facts."
+    user = (
+        "Use ONLY these verbatim quotes:\n" +
+        "\n".join(f"- {q}" for q in evidence_quotes[:6]) +
+        f"\n\nWrite 2–4 short bullets. End with: Decision: {decided_label} because <12–20 words>."
     )
+    return [
+      {"role":"system","content": sys},
+      {"role":"user","content": user},
+      {"role":"assistant","content": ""}  # fresh assistant turn
+    ]
 
 def create_fallback_rationale(evidence_quotes: List[str], decided_label: str) -> str:
     """Create a simple rationale when model generation fails"""

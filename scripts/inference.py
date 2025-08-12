@@ -32,7 +32,7 @@ sys.path.insert(0, str(project_root))
 
 # Import new modules for scoring and rationale
 from epituner.inference_scoring import score_labels, pick_label
-from epituner.rationale import extract_evidence, rationale_prompt, create_fallback_rationale
+from epituner.rationale import extract_evidence, build_rationale_messages, create_fallback_rationale
 
 
 def load_temperature() -> float:
@@ -323,22 +323,22 @@ Please provide your classification in the following format:
             # Format the input for classification
             input_text = self.format_record(record, classification_topic)
             
-            # Build classification prompt suffix (end with colon, add space before labels)
-            prompt_text = input_text + "\nAnswer (choose exactly one):"
+            # Build the classification chat messages ONCE per record
+            messages = [
+                {"role":"system","content":"You are a clinical assistant. Output only the answer label."},
+                {"role":"user","content": input_text},  # your current record-to-text
+                {"role":"assistant","content":"Answer: "}  # label will follow this
+            ]
             
             # Load temperature from calibration
             temperature = load_temperature()
             
-            # Score the labels using the new approach (add space before labels)
-            scores = score_labels(self.model, self.tokenizer, prompt_text, labels=(" Match", " Not a Match"))
+            # Score the labels using the new approach
+            scores = score_labels(self.model, self.tokenizer, messages, labels=("Match","Not a Match"))
             print(f"Debug: Raw scores = {scores}")
             
             label, confidence, unknown = pick_label(scores, tau=0.15, temperature=temperature)
             print(f"Debug: Label = {label}, Confidence = {confidence}, Unknown = {unknown}")
-            
-            # Clean up label (remove leading space from tokenization fix)
-            if label.startswith(" "):
-                label = label[1:]
             
             if unknown:
                 label = "Unknown/Not able to determine"
@@ -347,32 +347,27 @@ Please provide your classification in the following format:
             evidence = extract_evidence(record)
             rationale_label = label if label != "Unknown/Not able to determine" else "Unknown"
             
-            # Try to generate rationale with model
+            # Try to generate rationale with model using fresh chat context
             rationale = None
             try:
-                prompt = rationale_prompt(evidence, rationale_label)
-                rationale_inputs = self.tokenizer(prompt, return_tensors="pt")
-                if torch.cuda.is_available():
-                    rationale_inputs = {k: v.cuda() for k, v in rationale_inputs.items()}
+                msgs = build_rationale_messages(evidence, rationale_label)
+                input_ids = self.tokenizer.apply_chat_template(msgs, add_generation_prompt=True, return_tensors="pt").to(self.model.device)
                 
                 with torch.no_grad():
-                    rationale_outputs = self.model.generate(
-                        **rationale_inputs,
-                        max_new_tokens=100,
-                        do_sample=False,  # deterministic
-                        temperature=0.1,  # Very low temperature for focused output
+                    out = self.model.generate(
+                        input_ids, 
+                        max_new_tokens=120, 
+                        do_sample=False, 
+                        eos_token_id=self.tokenizer.eos_token_id,
                         pad_token_id=self.tokenizer.eos_token_id
                     )
                 
-                rationale_text = self.tokenizer.decode(
-                    rationale_outputs[0][rationale_inputs['input_ids'].shape[1]:], 
-                    skip_special_tokens=True
-                ).strip()
+                rationale_text = self.tokenizer.decode(out[0][input_ids.shape[-1]:], skip_special_tokens=True).strip()
                 
                 # Check if the generated text looks like a proper rationale (not instructions)
                 if (rationale_text and 
                     len(rationale_text) > 20 and 
-                    not rationale_text.lower().startswith(('you will', 'write', 'facts you may', 'paraphrase'))):
+                    not rationale_text.lower().startswith(('rewrite', 'write', 'facts you may', 'paraphrase', 'use only'))):
                     rationale = rationale_text
                     
             except Exception as e:
