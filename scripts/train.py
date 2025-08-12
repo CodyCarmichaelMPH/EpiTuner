@@ -379,31 +379,42 @@ class LoRATrainer:
         # Split dataset
         dataset_splits = self.split_dataset(tokenized_dataset)
         
-        # Setup training arguments
-        training_args = TrainingArguments(
-            output_dir=output_dir,
-            learning_rate=self.config['train']['learning_rate'],
-            num_train_epochs=self.config['train']['num_epochs'],
-            per_device_train_batch_size=1 if self.config['train']['batch_size'] == 'auto' else self.config['train']['batch_size'],
-            per_device_eval_batch_size=1,
-            gradient_accumulation_steps=8 if self.config['train']['gradient_accumulation_steps'] == 'auto' else self.config['train']['gradient_accumulation_steps'],
-            warmup_ratio=self.config['train']['warmup_ratio'],
-            weight_decay=self.config['train']['weight_decay'],
-            logging_steps=self.config['train']['logging_steps'],
-            evaluation_strategy=self.config['train']['evaluation_strategy'],
-            eval_steps=self.config['train']['eval_steps'],
-            save_strategy=self.config['train']['save_strategy'],
-            save_steps=self.config['train']['save_steps'],
-            load_best_model_at_end=self.config['train']['load_best_model_at_end'],
-            metric_for_best_model=self.config['train']['metric_for_best_model'],
-            greater_is_better=self.config['train']['greater_is_better'],
-            fp16=self.config['train']['fp16'],
-            bf16=self.config['train']['bf16'],
-            dataloader_num_workers=self.config['train']['dataloader_num_workers'],
-            save_total_limit=self.config['train']['save_total_limit'],
-            report_to=self.config['train']['report_to'],
-            remove_unused_columns=False,
-        )
+        # Setup training arguments with version compatibility
+        training_kwargs = {
+            'output_dir': output_dir,
+            'learning_rate': self.config['train']['learning_rate'],
+            'num_train_epochs': self.config['train']['num_epochs'],
+            'per_device_train_batch_size': 1 if self.config['train']['batch_size'] == 'auto' else self.config['train']['batch_size'],
+            'per_device_eval_batch_size': 1,
+            'gradient_accumulation_steps': 8 if self.config['train']['gradient_accumulation_steps'] == 'auto' else self.config['train']['gradient_accumulation_steps'],
+            'warmup_ratio': self.config['train']['warmup_ratio'],
+            'weight_decay': self.config['train']['weight_decay'],
+            'logging_steps': self.config['train']['logging_steps'],
+            'eval_strategy': self.config['train']['evaluation_strategy'],
+            'eval_steps': self.config['train']['eval_steps'],
+            'save_strategy': self.config['train']['save_strategy'],
+            'save_steps': self.config['train']['save_steps'],
+            'load_best_model_at_end': self.config['train']['load_best_model_at_end'],
+            'metric_for_best_model': self.config['train']['metric_for_best_model'],
+            'greater_is_better': self.config['train']['greater_is_better'],
+            'fp16': self.config['train']['fp16'],
+            'bf16': self.config['train']['bf16'],
+            'dataloader_num_workers': self.config['train']['dataloader_num_workers'],
+            'save_total_limit': self.config['train']['save_total_limit'],
+            'remove_unused_columns': False,
+        }
+        
+        # Add report_to only if supported (newer transformers versions)
+        try:
+            from transformers import __version__ as transformers_version
+            import packaging.version
+            if packaging.version.parse(transformers_version) >= packaging.version.parse("4.21.0"):
+                training_kwargs['report_to'] = self.config['train']['report_to']
+        except (ImportError, AttributeError):
+            # Fallback if version check fails
+            pass
+        
+        training_args = TrainingArguments(**training_kwargs)
         
         # Data collator
         data_collator = DataCollatorForLanguageModeling(
