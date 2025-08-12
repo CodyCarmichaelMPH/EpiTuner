@@ -1043,25 +1043,83 @@ def real_training(data_path: str, config_path: str, output_dir: str):
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
         )
         
-        # Monitor training progress
+        # Monitor training progress with real-time parsing
         output_lines = []
-        progress_steps = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        step_idx = 0
+        import re
         
-        status_text.text("🔄 Training is running... Check console for detailed progress.")
+        # Initialize progress tracking
+        current_epoch = 0
+        total_epochs = 0
+        current_step = 0
+        total_steps = 0
+        current_loss = 0.0
+        
+        status_text.text("🔄 Training is starting...")
         
         for line in process.stdout:
             output_lines.append(line.strip())
             
-            # Update progress based on training output
-            if any(keyword in line.lower() for keyword in ['epoch', 'step', 'loss']):
-                if step_idx < len(progress_steps):
-                    progress_bar.progress(progress_steps[step_idx])
-                    step_idx += 1
+            # Parse Hugging Face Trainer output format
+            # Look for lines like: "Epoch 1/3: 100%|██████████| 50/50 [00:30<00:00,  1.67it/s, loss=0.1234]"
+            trainer_progress = re.search(r'Epoch\s+(\d+)/(\d+):\s+(\d+)%\|.*?\|.*?loss=([\d.]+)', line)
+            if trainer_progress:
+                current_epoch = int(trainer_progress.group(1))
+                total_epochs = int(trainer_progress.group(2))
+                progress_percent = int(trainer_progress.group(3))
+                current_loss = float(trainer_progress.group(4))
+                
+                # Calculate overall progress
+                epoch_progress = (current_epoch - 1) / total_epochs
+                step_progress = progress_percent / 100 / total_epochs
+                progress = epoch_progress + step_progress
+                
+                progress_bar.progress(min(progress, 0.95))
+                status_text.text(f"🔄 Epoch {current_epoch}/{total_epochs} ({progress_percent}%) - Loss: {current_loss:.4f}")
+                print(f"Progress: {progress:.1%} (Epoch {current_epoch}/{total_epochs}, {progress_percent}%, Loss: {current_loss:.4f})")
             
-            # Show key updates
-            if 'epoch' in line.lower() or 'completed' in line.lower():
+            # Parse epoch progress (e.g., "epoch 2/3")
+            epoch_match = re.search(r'epoch\s+(\d+)/(\d+)', line.lower())
+            if epoch_match:
+                current_epoch = int(epoch_match.group(1))
+                total_epochs = int(epoch_match.group(2))
+                progress = current_epoch / total_epochs
+                progress_bar.progress(progress)
+                status_text.text(f"🔄 Training epoch {current_epoch}/{total_epochs}...")
+                print(f"Progress: {progress:.1%} (Epoch {current_epoch}/{total_epochs})")
+            
+            # Parse step progress (e.g., "step 150/300")
+            step_match = re.search(r'step\s+(\d+)/(\d+)', line.lower())
+            if step_match:
+                current_step = int(step_match.group(1))
+                total_steps = int(step_match.group(2))
+                if total_epochs > 0:
+                    # Calculate overall progress including epochs
+                    epoch_progress = (current_epoch - 1) / total_epochs
+                    step_progress = current_step / total_steps / total_epochs
+                    progress = epoch_progress + step_progress
+                else:
+                    progress = current_step / total_steps
+                progress_bar.progress(min(progress, 0.95))  # Keep some room for completion
+                status_text.text(f"🔄 Training step {current_step}/{total_steps} (epoch {current_epoch}/{total_epochs})...")
+                print(f"Progress: {progress:.1%} (Step {current_step}/{total_steps})")
+            
+            # Parse loss values
+            loss_match = re.search(r'loss:\s*([\d.]+)', line.lower())
+            if loss_match:
+                current_loss = float(loss_match.group(1))
+                status_text.text(f"🔄 Training... Loss: {current_loss:.4f}")
+                print(f"Loss: {current_loss:.4f}")
+            
+            # Parse completion messages
+            if 'training completed' in line.lower() or 'saving model' in line.lower():
+                progress_bar.progress(0.98)
                 status_text.text(f"🔄 {line.strip()}")
+                print(f"Status: {line.strip()}")
+            
+            # Parse error messages
+            if 'error' in line.lower() or 'exception' in line.lower():
+                print(f"ERROR: {line.strip()}")
+                status_text.text(f"❌ Error: {line.strip()}")
         
         # Wait for completion
         return_code = process.wait()
@@ -1074,8 +1132,15 @@ def real_training(data_path: str, config_path: str, output_dir: str):
         print(f"Return code: {return_code}")
         
         if return_code == 0:
+            # Ensure progress bar shows completion
             progress_bar.progress(1.0)
             status_text.text("✅ Training completed successfully!")
+            
+            # Show final training summary
+            if current_epoch > 0 and total_epochs > 0:
+                st.info(f"🎉 Training completed: {current_epoch}/{total_epochs} epochs")
+            if current_loss > 0:
+                st.info(f"📊 Final loss: {current_loss:.4f}")
             
             # Debug: List files in output directory
             print(f"=== FILES IN OUTPUT DIRECTORY: {output_dir} ===")
