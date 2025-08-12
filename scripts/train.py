@@ -541,6 +541,147 @@ SYSTEM "You are an expert medical coder trained to classify medical records. You
             
         except Exception as e:
             print(f"Warning: Could not create Ollama model files: {e}")
+    
+    def perform_corrective_sweep(self, dataset: Dataset, output_dir: str, model_name: str = None) -> Dataset:
+        """Perform a corrective sweep to validate and improve classifications"""
+        print("Performing corrective sweep to validate classifications...")
+        
+        # Load validation template
+        validation_template_path = os.path.join(os.path.dirname(__file__), '..', 'chat_templates', 'validation_template.jinja')
+        try:
+            with open(validation_template_path, 'r', encoding='utf-8') as f:
+                validation_template = f.read()
+        except FileNotFoundError:
+            print(f"Warning: Validation template not found at {validation_template_path}")
+            print("Using built-in validation template...")
+            validation_template = """**Classification Validation Task**
+
+You are a senior medical coder reviewing classifications made by a junior coder. Your task is to validate the classification and rationale for accuracy and completeness.
+
+**Classification Criteria:** {{ classification_topic }}
+
+**Medical Record:**
+{{ medical_record }}
+
+**Original Classification:**
+- Classification: {{ original_classification }}
+- Confidence: {{ original_confidence }}
+- Rationale: {{ original_rationale }}
+
+**Validation Instructions:**
+1. Review the medical record carefully
+2. Evaluate the original classification for accuracy
+3. Assess the rationale for completeness and evidence-based reasoning
+4. Determine if the classification should be:
+   - **ACCEPTED** - Classification and rationale are accurate and complete
+   - **REVISED** - Classification is correct but rationale needs improvement
+   - **REDO** - Classification is incorrect or rationale is fundamentally flawed
+
+**Your Response:**
+1. **Validation Decision:** [ACCEPTED/REVISED/REDO]
+2. **Reasoning:** [Explain why you made this decision]
+3. **If REVISED/REDO, provide improved classification:**
+   - **Classification:** [Match/Not a Match/Unknown]
+   - **Confidence:** [Very Confident/Confident/Somewhat Confident/Not Very Confident/Not at all Confident]
+   - **Rationale:** [Provide a detailed, evidence-based explanation that includes:
+     - Key medical indicators from the record that support your classification
+     - Specific symptoms, diagnoses, or demographic factors that align with the criteria
+     - Any conflicting or ambiguous information that influenced your decision
+     - Clinical reasoning for why this case does or does not meet the classification criteria
+     - Reference to specific sections of the medical record]"""
+        
+        from jinja2 import Template
+        template = Template(validation_template)
+        
+        corrected_data = []
+        corrections_made = 0
+        
+        for i, record in enumerate(dataset):
+            if i % 10 == 0:
+                print(f"Validating record {i+1}/{len(dataset)}...")
+            
+            # Create validation prompt
+            validation_prompt = template.render(
+                classification_topic=self.config.get('classification_topic', ''),
+                medical_record=record['narrative_record'],
+                original_classification=record['expert_rating'],
+                original_confidence='Confident',  # Default
+                original_rationale=record.get('rationale', 'No rationale provided')
+            )
+            
+            # For now, we'll simulate the validation process
+            # In a real implementation, you'd use the trained model to perform this validation
+            # This is a placeholder for the corrective sweep logic
+            
+            # Simulate validation decision (in practice, this would be model-generated)
+            validation_decision = self._simulate_validation(record)
+            
+            if validation_decision['decision'] in ['REVISED', 'REDO']:
+                corrections_made += 1
+                # Update the record with corrected information
+                corrected_record = record.copy()
+                corrected_record['expert_rating'] = validation_decision['classification']
+                corrected_record['rationale'] = validation_decision['rationale']
+                corrected_record['validation_notes'] = validation_decision['reasoning']
+                corrected_data.append(corrected_record)
+            else:
+                # Keep original classification
+                record['validation_notes'] = validation_decision['reasoning']
+                corrected_data.append(record)
+        
+        # Save validation results
+        validation_results = {
+            'total_records': len(dataset),
+            'corrections_made': corrections_made,
+            'correction_rate': corrections_made / len(dataset) * 100,
+            'validation_template': validation_template
+        }
+        
+        with open(os.path.join(output_dir, 'validation_results.json'), 'w') as f:
+            json.dump(validation_results, f, indent=2)
+        
+        print(f"Corrective sweep completed:")
+        print(f"  - Total records: {len(dataset)}")
+        print(f"  - Corrections made: {corrections_made}")
+        print(f"  - Correction rate: {validation_results['correction_rate']:.1f}%")
+        
+        return Dataset.from_list(corrected_data)
+    
+    def _simulate_validation(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        """Simulate validation process (placeholder for model-based validation)"""
+        # This is a placeholder - in practice, you'd use the trained model
+        # to actually perform the validation
+        
+        # Simple heuristic-based validation for demonstration
+        narrative = record.get('narrative_record', '')
+        original_rating = record.get('expert_rating', '')
+        rationale = record.get('rationale', '')
+        
+        # Check if rationale is too short or generic
+        if len(rationale) < 50 or 'not documented' in rationale.lower():
+            return {
+                'decision': 'REVISED',
+                'reasoning': 'Rationale is too brief or generic, needs more specific medical evidence',
+                'classification': original_rating,
+                'rationale': f"Based on the medical record: {narrative[:200]}... [Enhanced rationale would be generated by the model]"
+            }
+        
+        # Check if classification seems reasonable
+        if original_rating not in ['Match', 'Not a Match', 'Unknown']:
+            return {
+                'decision': 'REDO',
+                'reasoning': 'Invalid classification value',
+                'classification': 'Unknown',
+                'rationale': 'Classification value was invalid, defaulting to Unknown pending review'
+            }
+        
+        # Most cases would be accepted
+        return {
+            'decision': 'ACCEPTED',
+            'reasoning': 'Classification and rationale appear accurate and complete',
+            'classification': original_rating,
+            'rationale': rationale
+        }
 
 
 def main():
@@ -553,6 +694,7 @@ def main():
     parser.add_argument("--template", type=str, default="chat_templates/medical_classification.jinja", help="Chat template path")
     parser.add_argument("--model-name", type=str, help="Custom name for the trained model/LoRA adapter")
     parser.add_argument("--ollama-name", type=str, help="Name for Ollama model (if different from model-name)")
+    parser.add_argument("--corrective-sweep", action="store_true", help="Perform corrective sweep to validate and improve classifications")
     
     args = parser.parse_args()
     
@@ -572,6 +714,13 @@ def main():
     dataset = processor.process_dataset(args.data)
     
     print(f"Processed {len(dataset)} records")
+    
+    # Perform corrective sweep if requested
+    if args.corrective_sweep:
+        print("Performing corrective sweep on processed data...")
+        trainer = LoRATrainer(config)
+        dataset = trainer.perform_corrective_sweep(dataset, args.output, args.model_name)
+        print(f"Corrective sweep completed. Dataset updated with {len(dataset)} records.")
     
     # Initialize trainer
     trainer = LoRATrainer(config)

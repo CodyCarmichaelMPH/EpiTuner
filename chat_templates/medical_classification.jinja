@@ -13,7 +13,12 @@ You are an expert medical coder tasked with classifying medical records. Your go
 Please provide your classification in the following format:
 1. **Classification:** [Match/Not a Match/Unknown]
 2. **Confidence:** [Very Confident/Confident/Somewhat Confident/Not Very Confident/Not at all Confident]
-3. **Rationale:** [Detailed explanation of your reasoning]
+3. **Rationale:** [Provide a detailed, evidence-based explanation that includes:
+   - Key medical indicators from the record that support your classification
+   - Specific symptoms, diagnoses, or demographic factors that align with the criteria
+   - Any conflicting or ambiguous information that influenced your decision
+   - Clinical reasoning for why this case does or does not meet the classification criteria
+   - Reference to specific sections of the medical record (e.g., "The chief complaint indicates...", "The discharge diagnosis shows...")]
 
 {% elif message['role'] == 'assistant' %}**Classification:** {{ message.content.classification }}
 **Confidence:** {{ message.content.confidence }}
