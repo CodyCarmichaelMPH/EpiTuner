@@ -935,24 +935,27 @@ def start_training():
                         return 'no_quantization'  # Limited GPU
                     else:
                         return 'base'  # Should handle quantization
+                elif gpu_info['hardware_type'] in ['integrated_gpu', 'amd_gpu']:
+                    # Intel or AMD GPU detected - use no_quantization for GPU training
+                    return 'no_quantization'
                 else:
-                    # True CPU-only or integrated graphics
-                    return 'cpu_only'
+                    # Only use cpu_only if absolutely no GPU detected
+                    return 'no_quantization'  # Default to GPU-capable config
             except:
-                return 'cpu_only'  # Fallback to safest option
+                return 'no_quantization'  # Fallback to GPU-capable config
         
         # Select config based on compatibility
         compatibility = detect_system_compatibility()
         
         if compatibility == 'cpu_only':
             config_file = "configs/config_cpu_only.yaml"
-            print("Selected CPU-only config - no NVIDIA GPU detected or PyTorch too old")
+            print("Selected CPU-only config - PyTorch too old for GPU training")
         elif compatibility == 'no_quantization':
             config_file = "configs/config_no_quantization.yaml"
-            print("Selected no-quantization config - NVIDIA GPU detected but limited VRAM or CUDA issues")
+            print("Selected no-quantization config - GPU detected, standard LoRA training")
         else:
             config_file = "configs/config_base.yaml"
-            print("Selected base config with full features - NVIDIA GPU with sufficient VRAM")
+            print("Selected base config with full features - NVIDIA GPU with CUDA and sufficient VRAM")
         
         try:
             with open(config_file, 'r') as f:
