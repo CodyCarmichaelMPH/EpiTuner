@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-EpiTuner - LoRA Fine-tuning Tool for Medical Data
+EpiTuner - LoRA Fine-tuning Tool for Syndromic Surveillance Data
 Main Streamlit Application
 """
 
@@ -22,7 +22,7 @@ import time
 
 # Page configuration
 st.set_page_config(
-    page_title="EpiTuner - LoRA Fine-tuning for Medical Data",
+    page_title="EpiTuner - LoRA Fine-tuning for Syndromic Surveillance Data",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -358,7 +358,7 @@ class DataValidator:
 def display_header():
     """Display the main application header"""
     st.markdown('<div class="main-header">EpiTuner</div>', unsafe_allow_html=True)
-    st.markdown('<div style="text-align: center; font-size: 1.2rem; color: #666; margin-bottom: 2rem;">Professional LoRA Fine-tuning for Medical Data Classification</div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align: center; font-size: 1.2rem; color: #666; margin-bottom: 2rem;">Professional LoRA Fine-tuning for Syndromic Surveillance Data Classification</div>', unsafe_allow_html=True)
 
 
 def display_sidebar():
@@ -403,13 +403,13 @@ def step_data_upload():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown("### Upload Medical Data")
+        st.markdown("### Upload Syndromic Surveillance Data")
         
         # File uploader
         uploaded_file = st.file_uploader(
-            "Choose a CSV file containing medical records",
+            "Choose a CSV file containing syndromic surveillance records",
             type=['csv'],
-            help="Upload a CSV file with medical data including Chief Complaints, Diagnoses, and Expert Ratings"
+            help="Upload a CSV file with syndromic surveillance data including Chief Complaints, Diagnoses, and Expert Ratings"
         )
         
         if uploaded_file is not None:
@@ -624,7 +624,7 @@ ollama pull mistral         # Larger model if you have sufficient resources
     st.markdown("### Classification Task")
     classification_topic = st.text_area(
         "Describe what you want the model to classify:",
-        value="Used to detect motor vehicle collisions in medical records",
+        value="Used to detect motor vehicle collisions in syndromic surveillance records",
         help="Provide context about what the model should identify. This helps the model understand the classification task.",
         height=100
     )
@@ -1001,7 +1001,7 @@ def real_training(data_path: str, config_path: str, output_dir: str):
     try:
         # Get training parameters from session state
         model_name = st.session_state.selected_model
-        classification_topic = st.session_state.get('classification_topic', 'Medical classification')
+        classification_topic = st.session_state.get('classification_topic', 'Syndromic surveillance classification')
         
         # Build command for training script
         train_script = Path("scripts/train.py")
@@ -1312,7 +1312,7 @@ def run_real_inference():
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).parent / 'scripts'))
         
-        from inference import MedicalClassificationInference
+        from inference import SyndromicSurveillanceClassificationInference
         
         # Load the trained model
         model_path = st.session_state.model_results['model_path']
@@ -1325,7 +1325,7 @@ def run_real_inference():
         )
         
         # Get classification topic from training config
-        classification_topic = st.session_state.training_config.get('classification_topic', 'Medical Classification')
+        classification_topic = st.session_state.training_config.get('classification_topic', 'Syndromic Surveillance Classification')
         
         predictions = []
         
@@ -1336,8 +1336,8 @@ def run_real_inference():
         for idx, row in st.session_state.uploaded_data.iterrows():
             status_text.text(f"Processing record {idx + 1}/{len(st.session_state.uploaded_data)}...")
             
-            # Create medical record for inference
-            medical_record = {
+            # Create syndromic surveillance record for inference
+            surveillance_record = {
                 'biosense_id': row['C_Biosense_ID'],
                 'chief_complaint': row['ChiefComplaintOrig'],
                 'discharge_diagnosis': row['DischargeDiagnosis'],
@@ -1349,7 +1349,7 @@ def run_real_inference():
             }
             
             # Run inference
-            result = inference_engine.predict_single(medical_record, classification_topic)
+            result = inference_engine.predict_single(surveillance_record, classification_topic)
             
             # Format prediction for display
             prediction = {
@@ -1805,7 +1805,7 @@ PARAMETER top_p 0.9
 
 SYSTEM \"\"\"You are a medical AI assistant trained to classify medical records for {st.session_state.get('classification_topic', 'medical classification')}. 
 
-When analyzing a medical record, provide:
+When analyzing a syndromic surveillance record, provide:
 1. Your classification (Match/Not a Match/Unknown)
 2. Your reasoning 
 3. Your confidence level (Very Confident/Confident/Somewhat Confident/Not Very Confident/Not at all Confident)
@@ -1836,7 +1836,7 @@ ollama run epituner-medical
 
 **Then type a test prompt like:**
 ```
-Classify this medical record:
+Classify this syndromic surveillance record:
 Chief Complaint: Motor vehicle accident, chest pain
 Diagnosis: Rib fracture, chest contusion
 ```
@@ -1845,7 +1845,7 @@ Diagnosis: Rib fracture, chest contusion
 
 ### Command Line Usage
 ```powershell
-ollama run epituner-medical "Your medical record text here..."
+ollama run epituner-medical "Your syndromic surveillance record text here..."
 ```
 
 ### Python API Usage
@@ -1853,11 +1853,11 @@ ollama run epituner-medical "Your medical record text here..."
 import requests
 import json
 
-def classify_medical_record(record_text):
+def classify_syndromic_surveillance_record(record_text):
     response = requests.post('http://localhost:11434/api/generate',
                            json={{
                                'model': 'epituner-medical',
-                               'prompt': f"Classify this medical record: {{record_text}}",
+                               'prompt': f"Classify this syndromic surveillance record: {{record_text}}",
                                'stream': False
                            }})
     
@@ -1869,7 +1869,7 @@ def classify_medical_record(record_text):
 
 # Example usage
 record = "Chief Complaint: Chest pain after car accident..."
-classification = classify_medical_record(record)
+classification = classify_syndromic_surveillance_record(record)
 print(classification)
 ```
 
@@ -1894,7 +1894,7 @@ def process_csv_file(input_file, output_file):
             response = requests.post('http://localhost:11434/api/generate',
                                    json={{
                                        'model': 'epituner-medical',
-                                       'prompt': f"Classify this medical record: {{record_text}}",
+                                       'prompt': f"Classify this syndromic surveillance record: {{record_text}}",
                                        'stream': False
                                    }})
             
@@ -1940,14 +1940,14 @@ process_csv_file('my_medical_data.csv', 'classified_results.csv')
 
 **Your Model Details:**
 - **Base Model:** {base_model}
-- **Training Task:** {st.session_state.get('classification_topic', 'Medical classification')}
+- **Training Task:** {st.session_state.get('classification_topic', 'Syndromic surveillance classification')}
 - **Training Accuracy:** {st.session_state.model_results.get('accuracy', 0):.1%}
 - **Training Date:** {datetime.now().strftime('%Y-%m-%d')}
 - **Records Used:** {len(st.session_state.uploaded_data) if st.session_state.uploaded_data is not None else 0}
 
 ## Next Steps
 
-1. **Test thoroughly** with various medical records
+1. **Test thoroughly** with various syndromic surveillance records
 2. **Document your results** to track performance
 3. **Retrain if needed** with additional expert feedback
 4. **Share with your team** - they can use the same `ollama run epituner-medical` command
@@ -2038,7 +2038,7 @@ This package contains a LoRA (Low-Rank Adaptation) adapter trained with EpiTuner
 
 ## Model Information:
 - Base Model: {st.session_state.get('selected_model_display', st.session_state.selected_model)}
-- Training Task: {st.session_state.get('classification_topic', 'Medical classification')}
+- Training Task: {st.session_state.get('classification_topic', 'Syndromic surveillance classification')}
 - Training Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - Performance: {st.session_state.model_results.get('accuracy', 0):.1%} accuracy
 
@@ -2193,7 +2193,7 @@ def step_export():
            ```
         5. **Test it:**
            ```bash
-           ollama run epituner-medical "Your medical record text..."
+           ollama run epituner-medical "Your syndromic surveillance record text..."
            ```
         
         **The download includes:**

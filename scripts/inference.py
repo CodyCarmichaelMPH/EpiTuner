@@ -130,7 +130,7 @@ class ConfidenceCalculator:
             return "Not at all Confident"
 
 
-class MedicalClassificationInference:
+class SyndromicSurveillanceClassificationInference:
     """Inference engine for medical classification with confidence scoring"""
     
     def __init__(self, model_path: str, config_path: str):
@@ -206,11 +206,11 @@ class MedicalClassificationInference:
         else:
             # Fallback template
             self.template = Template("""
-            Medical Record Classification Task
+            Syndromic Surveillance Record Classification Task
 
             Classification Criteria: {{ classification_topic }}
 
-            Medical Record:
+            Syndromic Surveillance Record:
             - Chief Complaint: {{ chief_complaint }}
             - Discharge Diagnosis: {{ discharge_diagnosis }}
             - Demographics: {{ demographics }}
@@ -222,7 +222,7 @@ class MedicalClassificationInference:
             """)
     
     def format_record(self, record: Dict[str, Any], classification_topic: str) -> str:
-        """Format a medical record for inference"""
+        """Format a syndromic surveillance record for inference"""
         # Prepare the content
         content = {
             'chief_complaint': record.get('ChiefComplaintOrig', ''),
@@ -249,7 +249,7 @@ class MedicalClassificationInference:
         return formatted_text
     
     def predict_single(self, record: Dict[str, Any], classification_topic: str) -> Dict[str, Any]:
-        """Make prediction for a single medical record"""
+        """Make prediction for a single syndromic surveillance record"""
         
         # Format the input
         input_text = self.format_record(record, classification_topic)
@@ -353,7 +353,7 @@ class MedicalClassificationInference:
             return "Unknown/Not able to determine"
     
     def predict_batch(self, records: List[Dict[str, Any]], classification_topic: str) -> List[Dict[str, Any]]:
-        """Make predictions for a batch of medical records"""
+        """Make predictions for a batch of syndromic surveillance records"""
         results = []
         
         for i, record in enumerate(records):
@@ -381,7 +381,7 @@ class MedicalClassificationInference:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run inference on medical records")
+    parser = argparse.ArgumentParser(description="Run inference on syndromic surveillance records")
     parser.add_argument("--model", type=str, required=True, help="Path to trained model")
     parser.add_argument("--config", type=str, required=True, help="Path to config file")
     parser.add_argument("--data", type=str, required=True, help="Path to CSV data file")
@@ -395,7 +395,7 @@ def main():
     records = df.to_dict('records')
     
     # Initialize inference engine
-    inference_engine = MedicalClassificationInference(args.model, args.config)
+    inference_engine = SyndromicSurveillanceClassificationInference(args.model, args.config)
     
     # Run inference
     print(f"Running inference on {len(records)} records...")
