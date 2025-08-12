@@ -6,14 +6,9 @@ You are an expert medical coder tasked with classifying medical records. Your go
 
 **Classification Criteria:** {{ classification_topic }}
 
-**Medical Record Details:**
-- Chief Complaint: {{ message.content.chief_complaint }}
-- Discharge Diagnosis: {{ message.content.discharge_diagnosis }}
-- Patient Demographics: {{ message.content.demographics }}
-- Admission Reason: {{ message.content.admit_reason }}
-- Diagnosis Codes: {{ message.content.diagnosis_combo }}
-- CCDD Category: {{ message.content.ccdd_category }}
-- Triage Notes: {{ message.content.triage_notes }}
+**Medical Record:**
+
+{{ message.content.narrative_record }}
 
 Please provide your classification in the following format:
 1. **Classification:** [Match/Not a Match/Unknown]

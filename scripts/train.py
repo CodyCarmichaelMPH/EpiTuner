@@ -121,8 +121,30 @@ class MedicalDataProcessor:
     
     def process_record(self, row: pd.Series) -> Dict[str, Any]:
         """Convert a CSV row to training format"""
+        # Create a narrative medical record with clear section headers
+        narrative_record = f"""PATIENT DEMOGRAPHICS:
+Sex: {row.get('Sex', 'N/A')}
+Age: {row.get('Age', 'N/A')}
+Ethnicity: {row.get('c_ethnicity', 'N/A')}
+Race: {row.get('c_race', 'N/A')}
+
+CHIEF COMPLAINT:
+{row.get('ChiefComplaintOrig', 'Not documented')}
+
+ADMISSION REASON:
+{row.get('Admit_Reason_Combo', 'Not documented')}
+
+TRIAGE NOTES:
+{row.get('TriageNotes', row.get('TriageNotesOrig', 'Not documented'))}
+
+DIAGNOSIS INFORMATION:
+Discharge Diagnosis: {row.get('DischargeDiagnosis', 'Not documented')}
+Diagnosis Codes: {row.get('Diagnosis_Combo', 'Not documented')}
+CCDD Category: {row.get('CCDD Category', 'Not documented')}"""
+        
         # Prepare the medical record content
         content = {
+            'narrative_record': narrative_record,
             'chief_complaint': row.get('ChiefComplaintOrig', ''),
             'discharge_diagnosis': row.get('DischargeDiagnosis', ''),
             'demographics': f"Sex: {row.get('Sex', '')}, Age: {row.get('Age', '')}, Ethnicity: {row.get('c_ethnicity', '')}, Race: {row.get('c_race', '')}",
@@ -371,7 +393,7 @@ class LoRATrainer:
         # TODO: Add classification-specific metrics
         return {}
     
-    def train(self, dataset: Dataset, output_dir: str) -> str:
+    def train(self, dataset: Dataset, output_dir: str, model_name: str = None, ollama_name: str = None) -> str:
         """Main training function"""
         # Tokenize dataset
         tokenized_dataset = self.tokenize_dataset(dataset)
@@ -436,12 +458,34 @@ class LoRATrainer:
         print("Starting training...")
         train_result = self.trainer.train()
         
-        # Save the model
+        # Save the model and LoRA adapter
+        print("Saving model and LoRA adapter...")
         self.trainer.save_model()
         self.tokenizer.save_pretrained(output_dir)
         
-        # Save training metrics
-        metrics = {
+        # Save LoRA adapter separately if using LoRA/QLoRA
+        if self.config['tuning']['mode'] in ['qlora', 'lora'] and HAS_PEFT:
+            try:
+                from peft import PeftModel
+                # Save the LoRA adapter
+                lora_output_dir = os.path.join(output_dir, 'lora_adapter')
+                self.model.save_pretrained(lora_output_dir)
+                print(f"LoRA adapter saved to: {lora_output_dir}")
+                
+                # Create Ollama-compatible model if requested
+                if ollama_name:
+                    self._create_ollama_model(ollama_name, output_dir, lora_output_dir)
+                    
+            except Exception as e:
+                print(f"Warning: Could not save LoRA adapter separately: {e}")
+        
+        # Save model metadata
+        model_metadata = {
+            'model_name': model_name or 'epituner_medical_lora',
+            'ollama_name': ollama_name or model_name or 'epituner_medical_lora',
+            'training_mode': self.config['tuning']['mode'],
+            'base_model': self.config['model']['name'],
+            'classification_topic': self.config.get('classification_topic', ''),
             'train_loss': train_result.training_loss,
             'train_runtime': train_result.metrics['train_runtime'],
             'train_samples_per_second': train_result.metrics['train_samples_per_second'],
@@ -450,14 +494,53 @@ class LoRATrainer:
         # Evaluate on test set
         if len(dataset_splits['test']) > 0:
             eval_result = self.trainer.evaluate(dataset_splits['test'])
-            metrics.update({f'test_{k}': v for k, v in eval_result.items()})
+            model_metadata.update({f'test_{k}': v for k, v in eval_result.items()})
         
-        # Save metrics
-        with open(os.path.join(output_dir, 'training_metrics.json'), 'w') as f:
-            json.dump(metrics, f, indent=2)
+        # Save metadata
+        with open(os.path.join(output_dir, 'model_metadata.json'), 'w') as f:
+            json.dump(model_metadata, f, indent=2)
         
         print(f"Training completed. Model saved to: {output_dir}")
+        print(f"Model name: {model_metadata['model_name']}")
+        if ollama_name:
+            print(f"Ollama model name: {ollama_name}")
+        
         return output_dir
+    
+    def _create_ollama_model(self, ollama_name: str, output_dir: str, lora_adapter_dir: str):
+        """Create Ollama-compatible model files"""
+        try:
+            # Create Ollama Modelfile
+            modelfile_path = os.path.join(output_dir, 'Modelfile')
+            
+            # Get base model name for Ollama
+            base_model = self.config['model']['name']
+            if '/' in base_model:
+                base_model = base_model.split('/')[-1]  # Extract model name from path
+            
+            modelfile_content = f"""FROM {base_model}
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1
+PARAMETER stop "Human:"
+PARAMETER stop "Assistant:"
+
+# Medical classification LoRA adapter
+ADAPTER {lora_adapter_dir}
+
+# System prompt for medical classification
+SYSTEM "You are an expert medical coder trained to classify medical records. You analyze patient data and provide accurate classifications based on the specified criteria."
+"""
+            
+            with open(modelfile_path, 'w') as f:
+                f.write(modelfile_content)
+            
+            print(f"Ollama Modelfile created: {modelfile_path}")
+            print(f"To use with Ollama, run: ollama create {ollama_name} -f {modelfile_path}")
+            
+        except Exception as e:
+            print(f"Warning: Could not create Ollama model files: {e}")
 
 
 def main():
@@ -468,6 +551,8 @@ def main():
     parser.add_argument("--topic", type=str, required=True, help="Classification topic description")
     parser.add_argument("--output", type=str, required=True, help="Output directory")
     parser.add_argument("--template", type=str, default="chat_templates/medical_classification.jinja", help="Chat template path")
+    parser.add_argument("--model-name", type=str, help="Custom name for the trained model/LoRA adapter")
+    parser.add_argument("--ollama-name", type=str, help="Name for Ollama model (if different from model-name)")
     
     args = parser.parse_args()
     
@@ -493,7 +578,7 @@ def main():
     trainer.setup_model_and_tokenizer(args.model)
     
     # Train
-    model_path = trainer.train(dataset, args.output)
+    model_path = trainer.train(dataset, args.output, args.model_name, args.ollama_name)
     
     print(f"Training completed successfully! Model saved to: {model_path}")
 
