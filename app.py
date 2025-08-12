@@ -1522,18 +1522,36 @@ def step_expert_review():
             pct = count / len(predictions) * 100
             st.markdown(f"- {rating}: {count} ({pct:.1f}%)")
     
-    # Filter controls
+    # Enhanced filter controls for medical review
     st.markdown("### Review Predictions")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         show_filter = st.selectbox(
             "Show records:",
-            ["All", "Disagreements Only", "Low Confidence Only", "High Confidence Only"]
+            [
+                "All Records", 
+                "Need Review (Low Confidence)", 
+                "Need Review (Disagreements)", 
+                "High Confidence Only",
+                "Medium Confidence Only",
+                "Low Confidence Only",
+                "Disagreements Only"
+            ]
         )
     
     with col2:
+        confidence_threshold = st.slider(
+            "Confidence Score Threshold:",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.7,
+            step=0.05,
+            help="Records below this confidence score will be flagged for review"
+        )
+    
+    with col3:
         confidence_filter = st.selectbox(
             "Confidence level:",
             ["All"] + st.session_state.training_config.get('confidence_levels', 
@@ -1541,7 +1559,20 @@ def step_expert_review():
         )
     
     # Filter predictions
-    filtered_predictions = filter_predictions(predictions, show_filter, confidence_filter)
+    filtered_predictions = filter_predictions(predictions, show_filter, confidence_filter, confidence_threshold)
+    
+    # Summary of records needing review
+    low_confidence_count = len([p for p in predictions if p.get('confidence_score', 0.0) < confidence_threshold])
+    disagreement_count = len([p for p in predictions if not p['agreement']])
+    high_confidence_count = len([p for p in predictions if p.get('confidence_score', 0.0) >= confidence_threshold])
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Need Review (Low Confidence)", low_confidence_count, f"{low_confidence_count/len(predictions):.1%}")
+    with col2:
+        st.metric("Need Review (Disagreements)", disagreement_count, f"{disagreement_count/len(predictions):.1%}")
+    with col3:
+        st.metric("High Confidence", high_confidence_count, f"{high_confidence_count/len(predictions):.1%}")
     
     # Display predictions for review
     st.markdown(f"### Records to Review ({len(filtered_predictions)} of {len(predictions)})")
@@ -1580,19 +1611,29 @@ def step_expert_review():
             st.rerun()
 
 
-def filter_predictions(predictions, show_filter, confidence_filter):
-    """Filter predictions based on user criteria"""
+def filter_predictions(predictions, show_filter, confidence_filter, confidence_threshold=0.7):
+    """Filter predictions based on user criteria for medical review"""
     filtered = predictions.copy()
     
     # Apply show filter
-    if show_filter == "Disagreements Only":
+    if show_filter == "Need Review (Low Confidence)":
+        # Show records that need review due to low confidence
+        filtered = [p for p in filtered if p.get('confidence_score', 0.0) < confidence_threshold]
+    elif show_filter == "Need Review (Disagreements)":
+        # Show records where model disagrees with expert
         filtered = [p for p in filtered if not p['agreement']]
-    elif show_filter == "Low Confidence Only":
-        low_conf = ["Not Very Confident", "Not at all Confident"]
-        filtered = [p for p in filtered if p['confidence'] in low_conf]
     elif show_filter == "High Confidence Only":
         high_conf = ["Very Confident", "Confident"]
-        filtered = [p for p in filtered if p['confidence'] in high_conf]
+        filtered = [p for p in filtered if p['confidence'] in high_conf and p.get('confidence_score', 0.0) >= confidence_threshold]
+    elif show_filter == "Medium Confidence Only":
+        medium_conf = ["Somewhat Confident"]
+        filtered = [p for p in filtered if p['confidence'] in medium_conf]
+    elif show_filter == "Low Confidence Only":
+        low_conf = ["Not Very Confident", "Not at all Confident"]
+        filtered = [p for p in filtered if p['confidence'] in low_conf or p.get('confidence_score', 0.0) < confidence_threshold]
+    elif show_filter == "Disagreements Only":
+        filtered = [p for p in filtered if not p['agreement']]
+    # "All Records" shows everything
     
     # Apply confidence filter
     if confidence_filter != "All":
@@ -1604,18 +1645,34 @@ def filter_predictions(predictions, show_filter, confidence_filter):
 def display_prediction_review(pred, index):
     """Display a single prediction for expert review"""
     
-    # Determine styling based on agreement
-    if pred['agreement']:
-        border_color = "#28a745"  # Green for agreement
+    # Determine styling based on agreement and confidence
+    confidence_score = pred.get('confidence_score', 0.0)
+    confidence_threshold = 0.7  # Default threshold
+    
+    if pred['agreement'] and confidence_score >= confidence_threshold:
+        border_color = "#28a745"  # Green for agreement + high confidence
         bg_color = "#d4f6d4"
-    else:
+        review_status = "✅ No Review Needed"
+    elif not pred['agreement']:
         border_color = "#dc3545"  # Red for disagreement
         bg_color = "#f8d7da"
+        review_status = "⚠️ Review Needed (Disagreement)"
+    elif confidence_score < confidence_threshold:
+        border_color = "#ffc107"  # Yellow for low confidence
+        bg_color = "#fff3cd"
+        review_status = "⚠️ Review Needed (Low Confidence)"
+    else:
+        border_color = "#17a2b8"  # Blue for agreement but medium confidence
+        bg_color = "#d1ecf1"
+        review_status = "✅ No Review Needed"
     
     with st.container():
         st.markdown(f"""
         <div style="border: 2px solid {border_color}; background-color: {bg_color}; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;">
-            <strong>Record ID:</strong> {pred['biosense_id']}<br>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <strong>Record ID:</strong> {pred['biosense_id']}
+                <span style="font-weight: bold; color: {border_color};">{review_status}</span>
+            </div>
             <strong>Chief Complaint:</strong> {pred['chief_complaint']}<br>
             <strong>Discharge Diagnosis:</strong> {pred['discharge_diagnosis']}
         </div>
@@ -1633,7 +1690,24 @@ def display_prediction_review(pred, index):
         
         with col3:
             st.markdown("**Model Confidence:**")
-            st.markdown(f"_{pred['confidence']}_")
+            confidence_score = pred.get('confidence_score', 0.0)
+            
+            # Color code confidence
+            if confidence_score >= 0.8:
+                conf_color = "#28a745"  # Green for high confidence
+                conf_icon = "🟢"
+            elif confidence_score >= 0.6:
+                conf_color = "#ffc107"  # Yellow for medium confidence
+                conf_icon = "🟡"
+            else:
+                conf_color = "#dc3545"  # Red for low confidence
+                conf_icon = "🔴"
+            
+            st.markdown(f"""
+            <div style="color: {conf_color}; font-weight: bold;">
+            {conf_icon} {pred['confidence']} ({confidence_score:.1%})
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("**Model Rationale:**")
         st.markdown(f"""
