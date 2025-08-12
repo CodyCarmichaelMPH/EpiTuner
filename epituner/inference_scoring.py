@@ -13,28 +13,44 @@ def score_labels(model, tokenizer, prompt_text: str, labels=("Match", "Not a Mat
     scores = {}
     
     try:
+        # First tokenize the prompt to get the exact length in context
+        prompt_toks = tokenizer(prompt_text, return_tensors="pt").to(device)
+        prompt_len = prompt_toks["input_ids"].shape[-1]
+        
         for label in labels:
             text = prompt_text + label
             toks = tokenizer(text, return_tensors="pt").to(device)
             
-            # Mask prompt tokens; only compute loss on the label portion
-            prompt_toks = tokenizer(prompt_text, return_tensors="pt")
-            prompt_len = prompt_toks["input_ids"].shape[-1]
+            # Check if we have any additional tokens beyond the prompt
+            total_len = toks.input_ids.shape[-1]
             
-            # Create labels for loss computation
+            if total_len <= prompt_len:
+                print(f"Warning: No new tokens for '{label}' (prompt_len={prompt_len}, total_len={total_len})")
+                scores[label] = float('-inf')
+                continue
+            
+            # Create labels for loss computation - mask prompt tokens
             labels_ids = toks.input_ids.clone()
             labels_ids[:, :prompt_len] = -100
+            
+            # Verify we have some non-masked tokens
+            non_masked_tokens = (labels_ids != -100).sum().item()
+            if non_masked_tokens == 0:
+                print(f"Warning: All tokens masked for '{label}'")
+                scores[label] = float('-inf')
+                continue
             
             # Forward pass to get loss
             out = model(**toks, labels=labels_ids)
             
             # Check if loss is valid
             if out.loss is None or torch.isnan(out.loss) or torch.isinf(out.loss):
-                print(f"Warning: Invalid loss for label '{label}': {out.loss}")
-                scores[label] = float('-inf')  # Very low score for invalid loss
+                print(f"Warning: Invalid loss for label '{label}': {out.loss} (non_masked: {non_masked_tokens})")
+                scores[label] = float('-inf')
             else:
                 nll = out.loss.item()
                 scores[label] = -nll
+                print(f"Debug: Label '{label}' -> loss: {nll:.4f}, score: {-nll:.4f}")
                 
     except Exception as e:
         print(f"Error in score_labels: {e}")

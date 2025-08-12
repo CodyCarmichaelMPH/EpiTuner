@@ -323,18 +323,22 @@ Please provide your classification in the following format:
             # Format the input for classification
             input_text = self.format_record(record, classification_topic)
             
-            # Build classification prompt suffix
-            prompt_text = input_text + "\nAnswer (choose exactly one): "
+            # Build classification prompt suffix (end with colon, add space before labels)
+            prompt_text = input_text + "\nAnswer (choose exactly one):"
             
             # Load temperature from calibration
             temperature = load_temperature()
             
-            # Score the labels using the new approach
-            scores = score_labels(self.model, self.tokenizer, prompt_text, labels=("Match", "Not a Match"))
+            # Score the labels using the new approach (add space before labels)
+            scores = score_labels(self.model, self.tokenizer, prompt_text, labels=(" Match", " Not a Match"))
             print(f"Debug: Raw scores = {scores}")
             
             label, confidence, unknown = pick_label(scores, tau=0.15, temperature=temperature)
             print(f"Debug: Label = {label}, Confidence = {confidence}, Unknown = {unknown}")
+            
+            # Clean up label (remove leading space from tokenization fix)
+            if label.startswith(" "):
+                label = label[1:]
             
             if unknown:
                 label = "Unknown/Not able to determine"
