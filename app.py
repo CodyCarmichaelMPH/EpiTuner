@@ -2164,10 +2164,10 @@ def step_export():
     
     with col1:
         st.markdown("#### Model Performance")
-        st.markdown(f"- **Accuracy:** {results['accuracy']:.1%}")
-        st.markdown(f"- **Precision:** {results['precision']:.1%}")
-        st.markdown(f"- **Recall:** {results['recall']:.1%}")
-        st.markdown(f"- **F1 Score:** {results['f1_score']:.1%}")
+        st.markdown(f"- **Accuracy:** {results.get('accuracy', 0):.1%}")
+        st.markdown(f"- **Precision:** {results.get('precision', 0):.1%}")
+        st.markdown(f"- **Recall:** {results.get('recall', 0):.1%}")
+        st.markdown(f"- **F1 Score:** {results.get('f1_score', 0):.1%}")
         
         if st.session_state.expert_feedback:
             st.markdown(f"- **Expert Feedback:** {len(st.session_state.expert_feedback)} corrections")
@@ -2227,8 +2227,11 @@ def step_export():
         # Add model predictions to the original data
         df_with_predictions = st.session_state.uploaded_data.copy()
         
-        # Add model predictions
-        pred_dict = {p['biosense_id']: p for p in results['predictions']}
+        # Add model predictions if available
+        if 'predictions' in results and results['predictions']:
+            pred_dict = {p['biosense_id']: p for p in results['predictions']}
+        else:
+            pred_dict = {}
         df_with_predictions['Model_Rating'] = df_with_predictions['C_Biosense_ID'].map(
             lambda x: pred_dict.get(x, {}).get('model_rating', '')
         )
