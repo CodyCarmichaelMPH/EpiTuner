@@ -1509,7 +1509,21 @@ def step_expert_review():
         return
     
     results = st.session_state.model_results
-    predictions = results['predictions']
+    
+    # Check if predictions exist, if not try to generate them
+    if 'predictions' not in results or not results['predictions']:
+        st.warning("No predictions found. Attempting to generate predictions...")
+        predictions = run_real_inference()
+        if predictions:
+            results['predictions'] = predictions
+            st.session_state.model_results = results
+            st.success("Predictions generated successfully!")
+            st.rerun()
+        else:
+            st.error("Failed to generate predictions. Please check your model files and try training again.")
+            return
+    else:
+        predictions = results['predictions']
     
     # Overall metrics
     st.markdown("### Training Results")
@@ -1517,16 +1531,16 @@ def step_expert_review():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Accuracy", f"{results['accuracy']:.1%}")
+        st.metric("Accuracy", f"{results.get('accuracy', 0):.1%}")
     
     with col2:
-        st.metric("Precision", f"{results['precision']:.1%}")
+        st.metric("Precision", f"{results.get('precision', 0):.1%}")
     
     with col3:
-        st.metric("Recall", f"{results['recall']:.1%}")
+        st.metric("Recall", f"{results.get('recall', 0):.1%}")
     
     with col4:
-        st.metric("F1 Score", f"{results['f1_score']:.1%}")
+        st.metric("F1 Score", f"{results.get('f1_score', 0):.1%}")
     
     # Agreement analysis
     agreements = [p['agreement'] for p in predictions]
