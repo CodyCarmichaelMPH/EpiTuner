@@ -1026,6 +1026,12 @@ def real_training(data_path: str, config_path: str, output_dir: str):
         status_text.text("⚙️ Training in progress... This will take a while.")
         progress_bar.progress(0.3)
         
+        # Debug: Print the command being executed
+        print(f"=== EXECUTING COMMAND ===")
+        print(f"Command: {' '.join(cmd)}")
+        print(f"Working directory: {os.getcwd()}")
+        print("=== END COMMAND ===")
+        
         # Use more resource-friendly subprocess settings for Windows
         process = subprocess.Popen(
             cmd,
@@ -1060,12 +1066,28 @@ def real_training(data_path: str, config_path: str, output_dir: str):
         # Wait for completion
         return_code = process.wait()
         
+        # Debug: Print the output for troubleshooting
+        print("=== TRAINING OUTPUT ===")
+        for line in output_lines:
+            print(line)
+        print("=== END TRAINING OUTPUT ===")
+        print(f"Return code: {return_code}")
+        
         if return_code == 0:
             progress_bar.progress(1.0)
             status_text.text("✅ Training completed successfully!")
             
+            # Debug: List files in output directory
+            print(f"=== FILES IN OUTPUT DIRECTORY: {output_dir} ===")
+            if os.path.exists(output_dir):
+                for file in os.listdir(output_dir):
+                    print(f"  - {file}")
+            else:
+                print("  Output directory does not exist!")
+            print("=== END FILE LIST ===")
+            
             # Load actual training results
-            metrics_path = Path(output_dir) / "training_metrics.json"
+            metrics_path = Path(output_dir) / "model_metadata.json"
             if metrics_path.exists():
                 with open(metrics_path, 'r') as f:
                     training_metrics = json.load(f)
