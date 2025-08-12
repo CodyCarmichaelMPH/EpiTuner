@@ -30,6 +30,23 @@ import torch.nn.functional as F
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# Import new modules for scoring and rationale
+from epituner.inference_scoring import score_labels, pick_label
+from epituner.rationale import extract_evidence, rationale_prompt
+
+
+def load_temperature() -> float:
+    """Load temperature from calibration.json, default to 1.0"""
+    try:
+        calibration_path = project_root / 'calibration.json'
+        if calibration_path.exists():
+            with open(calibration_path, 'r') as f:
+                config = json.load(f)
+                return config.get('temperature', 1.0)
+    except Exception:
+        pass
+    return 1.0
+
 
 class ConfidenceCalculator:
     """Calculate confidence scores for model predictions"""
@@ -215,12 +232,14 @@ class SyndromicSurveillanceClassificationInference:
             except Exception as e2:
                 raise Exception(f"Failed to load model from both base model and model directory: {e2}")
         
-        # Load LoRA adapter if it exists
+        # Load LoRA adapter if it exists (exactly one adapter active)
         adapter_path = self.model_path
         if (adapter_path / "adapter_model.safetensors").exists() or (adapter_path / "adapter_model.bin").exists():
             print("Loading LoRA adapter...")
             try:
                 self.model = PeftModel.from_pretrained(base_model, str(adapter_path))
+                # Optional: merge adapter for deployment efficiency
+                # self.model = self.model.merge_and_unload()
             except Exception as e:
                 print(f"Warning: Could not load LoRA adapter: {e}")
                 print("Using base model without adapter...")
@@ -301,66 +320,67 @@ Please provide your classification in the following format:
         """Make prediction for a single syndromic surveillance record"""
         
         try:
-            # Format the input
+            # Format the input for classification
             input_text = self.format_record(record, classification_topic)
             
-            # Tokenize
-            inputs = self.tokenizer(
-                input_text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=self.config.get('model', {}).get('max_seq_len', 512),
-                padding=True
-            )
+            # Build classification prompt suffix
+            prompt_text = input_text + "\nAnswer (choose exactly one): "
             
-            # Move to device
+            # Load temperature from calibration
+            temperature = load_temperature()
+            
+            # Score the labels using the new approach
+            scores = score_labels(self.model, self.tokenizer, prompt_text, labels=("Match", "Not a Match"))
+            label, confidence, unknown = pick_label(scores, tau=0.15, temperature=temperature)
+            
+            if unknown:
+                label = "Unknown/Not able to determine"
+            
+            # Generate rationale using quoted evidence
+            evidence = extract_evidence(record)
+            rationale_label = label if label != "Unknown/Not able to determine" else "Unknown"
+            prompt = rationale_prompt(evidence, rationale_label)
+            
+            # Generate rationale (deterministic and short)
+            rationale_inputs = self.tokenizer(prompt, return_tensors="pt")
             if torch.cuda.is_available():
-                inputs = {k: v.cuda() for k, v in inputs.items()}
+                rationale_inputs = {k: v.cuda() for k, v in rationale_inputs.items()}
             
-            # Generate response with optimized parameters for medical classification
             with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=self.config.get('generation', {}).get('max_new_tokens', 512),  # Increased for detailed rationale
-                    temperature=self.config.get('generation', {}).get('temperature', 0.3),  # Lower temp for more consistent output
-                    top_p=self.config.get('generation', {}).get('top_p', 0.85),  # Slightly more focused
-                    top_k=self.config.get('generation', {}).get('top_k', 50),  # Add top_k for better quality
-                    do_sample=True,
-                    repetition_penalty=1.1,  # Prevent repetitive text
-                    pad_token_id=self.tokenizer.eos_token_id,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                    early_stopping=True  # Stop when EOS is generated
+                rationale_outputs = self.model.generate(
+                    **rationale_inputs,
+                    max_new_tokens=120,
+                    do_sample=False,  # deterministic
+                    pad_token_id=self.tokenizer.eos_token_id
                 )
             
-            # Decode the generated text
-            generated_ids = outputs.sequences[0][inputs['input_ids'].shape[1]:]
-            generated_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+            rationale_text = self.tokenizer.decode(
+                rationale_outputs[0][rationale_inputs['input_ids'].shape[1]:], 
+                skip_special_tokens=True
+            ).strip()
             
-            # Calculate confidence
-            if hasattr(outputs, 'scores') and outputs.scores:
-                # Stack all logits
-                all_logits = torch.stack(outputs.scores, dim=0)  # [seq_len, batch_size, vocab_size]
-                all_logits = all_logits[:, 0, :]  # Remove batch dimension
-                
-                confidence_score = ConfidenceCalculator.calculate_combined_confidence(
-                    all_logits, generated_ids
-                )
+            # Extract just the rationale content (remove any leftover prompt parts)
+            rationale_lines = [line.strip() for line in rationale_text.split('\n') if line.strip()]
+            if rationale_lines:
+                rationale = '\n'.join(rationale_lines)
             else:
-                confidence_score = 0.5  # Default if no scores available
+                rationale = f"Classification: {label} based on available evidence."
             
-            # Parse the generated response
-            parsed_response = self._parse_response(generated_text)
+            # Convert confidence to percentage and level
+            confidence_score = confidence
+            confidence_percentage = round(confidence * 100, 1)
+            confidence_level = ConfidenceCalculator.confidence_to_level(confidence_score)
             
-            # Add confidence information - prioritize calculated score over parsed text
-            parsed_response['confidence_score'] = confidence_score
-            calculated_confidence_level = ConfidenceCalculator.confidence_to_level(confidence_score)
-            parsed_response['confidence_level'] = calculated_confidence_level
-            
-            # Use calculated confidence level as the main confidence field for consistency
-            parsed_response['confidence'] = calculated_confidence_level
-            
-            return parsed_response
+            return {
+                'classification': label,
+                'confidence': confidence_level,
+                'confidence_score': confidence_score,
+                'confidence_level': confidence_level,
+                'confidence_percentage': confidence_percentage,
+                'rationale': rationale,
+                'raw_response': rationale_text,
+                'scores': scores
+            }
             
         except Exception as e:
             print(f"Error during prediction: {e}")
@@ -370,6 +390,7 @@ Please provide your classification in the following format:
                 'confidence': 'Not at all Confident',
                 'confidence_score': 0.0,
                 'confidence_level': 'Not at all Confident',
+                'confidence_percentage': 0.0,
                 'rationale': f'Error during prediction: {str(e)}',
                 'raw_response': '',
                 'error': str(e)
