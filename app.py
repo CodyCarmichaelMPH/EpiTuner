@@ -1188,18 +1188,66 @@ def generate_mock_predictions():
     predictions = []
     confidence_levels = ["Very Confident", "Confident", "Somewhat Confident", "Not Very Confident", "Not at all Confident"]
     
+    # Analyze expert rating distribution to create more realistic predictions
+    expert_ratings = st.session_state.uploaded_data['Expert Rating'].value_counts()
+    total_records = len(st.session_state.uploaded_data)
+    
+    # Create weighted prediction probabilities based on expert distribution
+    rating_weights = {}
+    for rating in ["Match", "Not a Match", "Unknown/Not able to determine"]:
+        count = expert_ratings.get(rating, 0)
+        rating_weights[rating] = count / total_records
+    
     for _, row in st.session_state.uploaded_data.iterrows():
-        # Simulate model predictions
-        model_rating = random.choice(["Match", "Not a Match", "Unknown/Not able to determine"])
-        confidence = random.choice(confidence_levels)
-        model_rationale = f"Based on analysis of chief complaint and diagnosis patterns, this case {model_rating.lower()}."
+        # Generate more realistic model predictions with bias toward expert distribution
+        expert_rating = row['Expert Rating']
+        
+        # 70% chance to agree with expert, 30% chance to disagree
+        if random.random() < 0.7:
+            model_rating = expert_rating
+        else:
+            # If disagreeing, choose from other options with some bias toward distribution
+            other_options = [r for r in ["Match", "Not a Match", "Unknown/Not able to determine"] if r != expert_rating]
+            weights = [rating_weights.get(r, 0.1) for r in other_options]
+            # Normalize weights
+            total_weight = sum(weights)
+            if total_weight > 0:
+                weights = [w/total_weight for w in weights]
+            else:
+                weights = [1/len(other_options)] * len(other_options)
+            model_rating = random.choices(other_options, weights=weights)[0]
+        
+        # Generate confidence based on agreement
+        if model_rating == expert_rating:
+            # Higher confidence when agreeing
+            confidence = random.choices(
+                ["Very Confident", "Confident", "Somewhat Confident"],
+                weights=[0.4, 0.4, 0.2]
+            )[0]
+        else:
+            # Lower confidence when disagreeing
+            confidence = random.choices(
+                ["Somewhat Confident", "Not Very Confident", "Not at all Confident"],
+                weights=[0.3, 0.4, 0.3]
+            )[0]
+        
+        # Generate detailed rationale based on the medical record
+        chief_complaint = row['ChiefComplaintOrig']
+        discharge_diagnosis = row['DischargeDiagnosis']
+        
+        if model_rating == "Match":
+            rationale = f"Based on analysis of the medical record: The chief complaint '{chief_complaint}' combined with the discharge diagnosis '{discharge_diagnosis}' clearly indicates this case meets the classification criteria. The clinical presentation and diagnostic findings align with the expected patterns for this classification."
+        elif model_rating == "Not a Match":
+            rationale = f"Analysis of the medical record shows: The chief complaint '{chief_complaint}' and discharge diagnosis '{discharge_diagnosis}' do not align with the classification criteria. The clinical presentation lacks the key indicators typically associated with this classification."
+        else:  # Unknown
+            rationale = f"Review of the medical record reveals: The chief complaint '{chief_complaint}' and discharge diagnosis '{discharge_diagnosis}' present ambiguous findings. There is insufficient clinical evidence to definitively classify this case, requiring additional information or expert review."
         
         predictions.append({
             'biosense_id': row['C_Biosense_ID'],
             'expert_rating': row['Expert Rating'],
             'model_rating': model_rating,
             'confidence': confidence,
-            'model_rationale': model_rationale,
+            'model_rationale': rationale,
             'agreement': model_rating == row['Expert Rating'],
             'chief_complaint': row['ChiefComplaintOrig'],
             'discharge_diagnosis': row['DischargeDiagnosis']
@@ -1295,7 +1343,59 @@ def step_expert_review():
     agreements = [p['agreement'] for p in predictions]
     agreement_rate = sum(agreements) / len(agreements)
     
+    # Calculate agreement by confidence level
+    confidence_agreement = {}
+    for pred in predictions:
+        conf = pred['confidence']
+        if conf not in confidence_agreement:
+            confidence_agreement[conf] = {'total': 0, 'agreed': 0}
+        confidence_agreement[conf]['total'] += 1
+        if pred['agreement']:
+            confidence_agreement[conf]['agreed'] += 1
+    
     st.markdown(f"### Model-Expert Agreement: {agreement_rate:.1%}")
+    
+    # Show agreement by confidence level
+    st.markdown("#### Agreement by Confidence Level:")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    confidence_order = ["Very Confident", "Confident", "Somewhat Confident", "Not Very Confident", "Not at all Confident"]
+    for i, conf in enumerate(confidence_order):
+        if conf in confidence_agreement:
+            stats = confidence_agreement[conf]
+            agreement_pct = stats['agreed'] / stats['total'] if stats['total'] > 0 else 0
+            with [col1, col2, col3, col4, col5][i]:
+                st.metric(
+                    conf, 
+                    f"{agreement_pct:.1%}",
+                    f"{stats['agreed']}/{stats['total']}"
+                )
+    
+    # Show rating distribution comparison
+    st.markdown("#### Rating Distribution Comparison:")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Expert Ratings:**")
+        expert_counts = {}
+        for pred in predictions:
+            rating = pred['expert_rating']
+            expert_counts[rating] = expert_counts.get(rating, 0) + 1
+        
+        for rating, count in expert_counts.items():
+            pct = count / len(predictions) * 100
+            st.markdown(f"- {rating}: {count} ({pct:.1f}%)")
+    
+    with col2:
+        st.markdown("**Model Predictions:**")
+        model_counts = {}
+        for pred in predictions:
+            rating = pred['model_rating']
+            model_counts[rating] = model_counts.get(rating, 0) + 1
+        
+        for rating, count in model_counts.items():
+            pct = count / len(predictions) * 100
+            st.markdown(f"- {rating}: {count} ({pct:.1f}%)")
     
     # Filter controls
     st.markdown("### Review Predictions")
@@ -1411,7 +1511,11 @@ def display_prediction_review(pred, index):
             st.markdown(f"_{pred['confidence']}_")
         
         st.markdown("**Model Rationale:**")
-        st.markdown(f"_{pred['model_rationale']}_")
+        st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #007bff;">
+        {pred['model_rationale']}
+        </div>
+        """, unsafe_allow_html=True)
         
         # Expert feedback
         feedback_key = f"feedback_{index}"
