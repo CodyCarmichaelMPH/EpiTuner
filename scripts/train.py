@@ -82,13 +82,13 @@ def try_import_peft():
             'PeftModel': PeftModel
         }
         HAS_PEFT = True
-        print("✓ PEFT imported successfully")
+        print("+ PEFT imported successfully")
         return True
         
     except Exception as e:
         PEFT_ERROR = str(e)
         HAS_PEFT = False
-        print(f"✗ PEFT import failed: {e}")
+        print(f"X PEFT import failed: {e}")
         
         # Check if it's a BnB-related error
         if any(term in str(e).lower() for term in ['bitsandbytes', 'bnb', 'impl_abstract', '4bit', 'torch.library']):
