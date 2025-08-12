@@ -1074,25 +1074,44 @@ def real_training(data_path: str, config_path: str, output_dir: str):
                 results = {
                     'training_loss': training_metrics.get('train_loss', 0.5),
                     'validation_loss': training_metrics.get('test_eval_loss', 0.6),
-                    'accuracy': training_metrics.get('test_accuracy', 0.75),  # May not exist
-                    'precision': 0.8,  # Would need to compute from saved model
-                    'recall': 0.77,    # Would need to compute from saved model  
-                    'f1_score': 0.78,  # Would need to compute from saved model
                     'model_path': output_dir,
-                    'predictions': generate_mock_predictions(),  # Would need real inference
+                    'config_path': config_path,
+                    'training_metrics': training_metrics
                 }
+                
+                # Run real inference to get actual predictions and metrics
+                predictions = run_real_inference()
+                if predictions:
+                    # Calculate real metrics from predictions
+                    agreements = [p['agreement'] for p in predictions]
+                    accuracy = sum(agreements) / len(agreements) if agreements else 0.0
+                    
+                    # Calculate precision, recall, F1 from confusion matrix
+                    from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+                    
+                    y_true = [p['expert_rating'] for p in predictions]
+                    y_pred = [p['model_rating'] for p in predictions]
+                    
+                    precision, recall, f1, _ = precision_recall_fscore_support(
+                        y_true, y_pred, average='weighted', zero_division=0
+                    )
+                    
+                    results.update({
+                        'accuracy': accuracy,
+                        'precision': precision,
+                        'recall': recall,
+                        'f1_score': f1,
+                        'predictions': predictions,
+                        'training_metrics': training_metrics
+                    })
+                else:
+                    st.error("Failed to generate predictions. Please check the model.")
+                    return
             else:
-                # Fallback if metrics file doesn't exist
-                results = {
-                    'training_loss': 0.4,
-                    'validation_loss': 0.5,
-                    'accuracy': 0.8,
-                    'precision': 0.82,
-                    'recall': 0.78,
-                    'f1_score': 0.8,
-                    'model_path': output_dir,
-                    'predictions': generate_mock_predictions(),
-                }
+                # No metrics file found - this indicates a training problem
+                st.error("Training completed but no metrics file found. This indicates the training may have failed.")
+                st.info("Please check the training output for errors and try again.")
+                return
             
             st.session_state.model_results = results
             st.session_state.training_in_progress = False
@@ -1177,83 +1196,102 @@ def real_training(data_path: str, config_path: str, output_dir: str):
 
 
 
-def generate_mock_predictions():
-    """Generate mock predictions for expert review"""
+def run_real_inference():
+    """Run real model inference on the uploaded data"""
     if st.session_state.uploaded_data is None:
+        st.error("No data uploaded. Please upload your medical data first.")
         return []
     
-    import random
-    random.seed(42)
+    if not st.session_state.model_results or 'model_path' not in st.session_state.model_results:
+        st.error("No trained model available. Please complete training first.")
+        return []
     
-    predictions = []
-    confidence_levels = ["Very Confident", "Confident", "Somewhat Confident", "Not Very Confident", "Not at all Confident"]
+    # Check if model files actually exist
+    model_path = st.session_state.model_results['model_path']
+    if not os.path.exists(model_path):
+        st.error(f"Model files not found at {model_path}. Please ensure training completed successfully.")
+        return []
     
-    # Analyze expert rating distribution to create more realistic predictions
-    expert_ratings = st.session_state.uploaded_data['Expert Rating'].value_counts()
-    total_records = len(st.session_state.uploaded_data)
+    # Check for essential model files
+    required_files = ['pytorch_model.bin', 'config.json', 'tokenizer.json']
+    missing_files = [f for f in required_files if not os.path.exists(os.path.join(model_path, f))]
+    if missing_files:
+        st.error(f"Missing essential model files: {missing_files}. Training may have failed.")
+        return []
     
-    # Create weighted prediction probabilities based on expert distribution
-    rating_weights = {}
-    for rating in ["Match", "Not a Match", "Unknown/Not able to determine"]:
-        count = expert_ratings.get(rating, 0)
-        rating_weights[rating] = count / total_records
-    
-    for _, row in st.session_state.uploaded_data.iterrows():
-        # Generate more realistic model predictions with bias toward expert distribution
-        expert_rating = row['Expert Rating']
+    try:
+        # Import the real inference system
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent / 'scripts'))
         
-        # 70% chance to agree with expert, 30% chance to disagree
-        if random.random() < 0.7:
-            model_rating = expert_rating
-        else:
-            # If disagreeing, choose from other options with some bias toward distribution
-            other_options = [r for r in ["Match", "Not a Match", "Unknown/Not able to determine"] if r != expert_rating]
-            weights = [rating_weights.get(r, 0.1) for r in other_options]
-            # Normalize weights
-            total_weight = sum(weights)
-            if total_weight > 0:
-                weights = [w/total_weight for w in weights]
-            else:
-                weights = [1/len(other_options)] * len(other_options)
-            model_rating = random.choices(other_options, weights=weights)[0]
+        from inference import MedicalClassificationInference
         
-        # Generate confidence based on agreement
-        if model_rating == expert_rating:
-            # Higher confidence when agreeing
-            confidence = random.choices(
-                ["Very Confident", "Confident", "Somewhat Confident"],
-                weights=[0.4, 0.4, 0.2]
-            )[0]
-        else:
-            # Lower confidence when disagreeing
-            confidence = random.choices(
-                ["Somewhat Confident", "Not Very Confident", "Not at all Confident"],
-                weights=[0.3, 0.4, 0.3]
-            )[0]
+        # Load the trained model
+        model_path = st.session_state.model_results['model_path']
+        config_path = st.session_state.model_results.get('config_path', 'configs/config_base.yaml')
         
-        # Generate detailed rationale based on the medical record
-        chief_complaint = row['ChiefComplaintOrig']
-        discharge_diagnosis = row['DischargeDiagnosis']
+        # Initialize inference engine
+        inference_engine = MedicalClassificationInference(
+            model_path=model_path,
+            config_path=config_path
+        )
         
-        if model_rating == "Match":
-            rationale = f"Based on analysis of the medical record: The chief complaint '{chief_complaint}' combined with the discharge diagnosis '{discharge_diagnosis}' clearly indicates this case meets the classification criteria. The clinical presentation and diagnostic findings align with the expected patterns for this classification."
-        elif model_rating == "Not a Match":
-            rationale = f"Analysis of the medical record shows: The chief complaint '{chief_complaint}' and discharge diagnosis '{discharge_diagnosis}' do not align with the classification criteria. The clinical presentation lacks the key indicators typically associated with this classification."
-        else:  # Unknown
-            rationale = f"Review of the medical record reveals: The chief complaint '{chief_complaint}' and discharge diagnosis '{discharge_diagnosis}' present ambiguous findings. There is insufficient clinical evidence to definitively classify this case, requiring additional information or expert review."
+        # Get classification topic from training config
+        classification_topic = st.session_state.training_config.get('classification_topic', 'Medical Classification')
         
-        predictions.append({
-            'biosense_id': row['C_Biosense_ID'],
-            'expert_rating': row['Expert Rating'],
-            'model_rating': model_rating,
-            'confidence': confidence,
-            'model_rationale': rationale,
-            'agreement': model_rating == row['Expert Rating'],
-            'chief_complaint': row['ChiefComplaintOrig'],
-            'discharge_diagnosis': row['DischargeDiagnosis']
-        })
-    
-    return predictions
+        predictions = []
+        
+        # Run inference on each record
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for idx, row in st.session_state.uploaded_data.iterrows():
+            status_text.text(f"Processing record {idx + 1}/{len(st.session_state.uploaded_data)}...")
+            
+            # Create medical record for inference
+            medical_record = {
+                'biosense_id': row['C_Biosense_ID'],
+                'chief_complaint': row['ChiefComplaintOrig'],
+                'discharge_diagnosis': row['DischargeDiagnosis'],
+                'demographics': f"Sex: {row.get('Sex', 'N/A')}, Age: {row.get('Age', 'N/A')}, Ethnicity: {row.get('c_ethnicity', 'N/A')}, Race: {row.get('c_race', 'N/A')}",
+                'admit_reason': row.get('Admit_Reason_Combo', ''),
+                'diagnosis_combo': row.get('Diagnosis_Combo', ''),
+                'ccdd_category': row.get('CCDD Category', ''),
+                'triage_notes': row.get('TriageNotes', row.get('TriageNotesOrig', ''))
+            }
+            
+            # Run inference
+            result = inference_engine.predict_single(medical_record, classification_topic)
+            
+            # Format prediction for display
+            prediction = {
+                'biosense_id': row['C_Biosense_ID'],
+                'expert_rating': row['Expert Rating'],
+                'model_rating': result['classification'],
+                'confidence': result['confidence'],
+                'confidence_score': result.get('confidence_score', 0.0),
+                'model_rationale': result['rationale'],
+                'agreement': result['classification'] == row['Expert Rating'],
+                'chief_complaint': row['ChiefComplaintOrig'],
+                'discharge_diagnosis': row['DischargeDiagnosis']
+            }
+            
+            predictions.append(prediction)
+            
+            # Update progress
+            progress_bar.progress((idx + 1) / len(st.session_state.uploaded_data))
+        
+        status_text.text("Inference completed!")
+        progress_bar.empty()
+        status_text.empty()
+        
+        return predictions
+        
+    except Exception as e:
+        st.error(f"Error during inference: {str(e)}")
+        st.error("Please ensure the model was trained successfully and all dependencies are installed.")
+        return []
 
 
 def display_training_progress():
@@ -1776,9 +1814,7 @@ def create_and_download_lora_adapter():
     zip_buffer = io.BytesIO()
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Create mock adapter files
-        
-        # 1. Mock adapter weights (normally would be actual .safetensors)
+        # Create real adapter files from trained model
         adapter_config = {
             "base_model_name_or_path": st.session_state.selected_model,
             "bias": "none", 
@@ -1916,7 +1952,7 @@ def step_export():
         st.markdown("Download the trained LoRA adapter for use with Ollama or other tools.")
         
         if st.button("Download LoRA Adapter", type="primary"):
-            # Create a mock LoRA adapter file for download
+            # Create a real LoRA adapter file for download
             create_and_download_lora_adapter()
     
     with col2:
