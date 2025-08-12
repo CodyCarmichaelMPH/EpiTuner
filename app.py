@@ -920,15 +920,24 @@ def start_training():
                 # Check if BnB/PEFT is likely to work
                 if torch_major < 2 or (torch_major == 2 and torch_minor < 2):
                     return 'cpu_only'  # Old PyTorch, BnB incompatible
-                elif not torch.cuda.is_available():
-                    return 'cpu_only'  # No GPU
-                else:
-                    # Try to detect GPU memory
-                    gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9 if torch.cuda.is_available() else 0
+                
+                # Get our enhanced GPU info instead of just checking torch.cuda
+                gpu_info = GPUManager.get_gpu_info()
+                
+                if gpu_info['hardware_type'] == 'nvidia_gpu_no_cuda':
+                    # NVIDIA GPU detected but CUDA not available to PyTorch
+                    # Use no_quantization config - GPU might work after PyTorch upgrade
+                    return 'no_quantization'
+                elif gpu_info['has_cuda']:
+                    # CUDA is available - check memory
+                    gpu_memory = gpu_info['memory_gb']
                     if gpu_memory < 4:
                         return 'no_quantization'  # Limited GPU
                     else:
                         return 'base'  # Should handle quantization
+                else:
+                    # True CPU-only or integrated graphics
+                    return 'cpu_only'
             except:
                 return 'cpu_only'  # Fallback to safest option
         
@@ -937,13 +946,13 @@ def start_training():
         
         if compatibility == 'cpu_only':
             config_file = "configs/config_cpu_only.yaml"
-            print("Selected CPU-only config due to system limitations")
+            print("Selected CPU-only config - no NVIDIA GPU detected or PyTorch too old")
         elif compatibility == 'no_quantization':
             config_file = "configs/config_no_quantization.yaml"
-            print("Selected no-quantization config for compatibility")
+            print("Selected no-quantization config - NVIDIA GPU detected but limited VRAM or CUDA issues")
         else:
             config_file = "configs/config_base.yaml"
-            print("Selected base config with full features")
+            print("Selected base config with full features - NVIDIA GPU with sufficient VRAM")
         
         try:
             with open(config_file, 'r') as f:
