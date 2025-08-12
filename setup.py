@@ -33,18 +33,85 @@ def check_pip():
         return False
 
 
+def install_pytorch_gpu():
+    """Install PyTorch with proper GPU support"""
+    print("🔥 Installing PyTorch with GPU support...")
+    
+    # Detect CUDA version if available
+    cuda_version = None
+    try:
+        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+        if result.returncode == 0:
+            # Parse CUDA version from nvidia-smi output
+            lines = result.stdout.split('\n')
+            for line in lines:
+                if 'CUDA Version:' in line:
+                    cuda_version = line.split('CUDA Version:')[1].strip().split()[0]
+                    break
+    except FileNotFoundError:
+        print("⚠️  nvidia-smi not found - will install CPU version and warn user")
+    
+    # Install appropriate PyTorch version
+    if cuda_version:
+        print(f"🎯 Detected CUDA {cuda_version}")
+        
+        # Map CUDA versions to PyTorch index URLs
+        if cuda_version.startswith('12.1'):
+            torch_cmd = [sys.executable, "-m", "pip", "install", "torch", "torchvision", "torchaudio", 
+                        "--index-url", "https://download.pytorch.org/whl/cu121"]
+        elif cuda_version.startswith('11.8'):
+            torch_cmd = [sys.executable, "-m", "pip", "install", "torch", "torchvision", "torchaudio",
+                        "--index-url", "https://download.pytorch.org/whl/cu118"]
+        else:
+            # Default to CUDA 12.1 for newer versions
+            print(f"⚠️  CUDA {cuda_version} detected - using CUDA 12.1 PyTorch (should be compatible)")
+            torch_cmd = [sys.executable, "-m", "pip", "install", "torch", "torchvision", "torchaudio",
+                        "--index-url", "https://download.pytorch.org/whl/cu121"]
+    else:
+        print("⚠️  No CUDA detected - installing CPU version (training will be very slow!)")
+        torch_cmd = [sys.executable, "-m", "pip", "install", "torch", "torchvision", "torchaudio"]
+    
+    try:
+        subprocess.run(torch_cmd, check=True)
+        print("✅ PyTorch installed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install PyTorch: {e}")
+        return False
+
+
 def install_dependencies():
     """Install required dependencies"""
-    print("📦 Installing dependencies...")
+    print("📦 Installing core dependencies...")
     
+    # Install PyTorch first with GPU support
+    if not install_pytorch_gpu():
+        return False
+    
+    # Install other dependencies
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
                       check=True)
-        print("✅ Dependencies installed successfully")
-        return True
+        print("✅ Core dependencies installed successfully")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install dependencies: {e}")
+        print(f"❌ Failed to install core dependencies: {e}")
         return False
+    
+    # Try to install BitsAndBytes if CUDA is available
+    try:
+        import torch
+        if torch.cuda.is_available():
+            print("🔧 Installing BitsAndBytes for quantization...")
+            subprocess.run([sys.executable, "-m", "pip", "install", "bitsandbytes>=0.41.0"],
+                          check=True)
+            print("✅ BitsAndBytes installed successfully")
+        else:
+            print("⚠️  Skipping BitsAndBytes (no CUDA) - will use standard LoRA")
+    except Exception as e:
+        print(f"⚠️  BitsAndBytes installation failed: {e}")
+        print("   Will fallback to standard LoRA training")
+    
+    return True
 
 
 def check_cuda():

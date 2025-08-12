@@ -1,427 +1,161 @@
-# EpiTuner
+# EpiTuner SFT - Enhanced Fine-Tuning System
 
-**LoRA Fine-tuning Tool for Medical Data Classification**
+A comprehensive fine-tuning system with QLoRA/LoRA support for medical case evaluation and beyond.
 
-EpiTuner is a user-friendly application for fine-tuning language models on medical data using LoRA (Low-Rank Adaptation). It provides a complete workflow from data upload to model deployment, with a focus on PHI-safe local processing and expert-in-the-loop validation.
+## 🚀 Quick Setup (GPU Required)
 
-## Features
-
-- **Completely Local Processing** - All data stays on your machine (PHI-safe)
-- **Expert-in-the-Loop** - Review and correct model predictions
-- **Confidence Scoring** - Models provide confidence levels for predictions
-- **Easy Ollama Integration** - Deploy trained models with Ollama
-- **Memory Efficient** - QLoRA training on consumer GPUs
-- **Comprehensive Evaluation** - Detailed metrics and visualizations
-- **User-Friendly GUI** - Streamlit-based interface
-
-## Quick Start
-
-### 1. Installation
-
-**Windows:**
-```powershell
-# Clone the repository
-git clone https://github.com/CodyCarmichaelMPH/EpiTuner.git
-cd EpiTuner
-
-# Install dependencies and setup
-.\setup.ps1 install
-.\setup.ps1 setup
-
-# Check dependencies
-.\setup.ps1 check-deps
-```
-
-**Linux/macOS:**
+### Step 1: GPU Setup (CRITICAL)
 ```bash
-# Clone the repository
-git clone https://github.com/CodyCarmichaelMPH/EpiTuner.git
-cd EpiTuner
+# First, ensure GPU PyTorch is installed
+python install_gpu.py
 
-# Install dependencies
-make install
-
-# Create directory structure
-make setup
-
-# Check dependencies
-make check-deps
+# Verify GPU is working
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
 ```
 
-### 2. Run the Application
-
-**Windows:**
-```powershell
-.\setup.ps1 run-app
-```
-
-**Linux/macOS:**
+### Step 2: Complete Setup
 ```bash
-# Start the Streamlit GUI
-make run-app
+# Run full setup
+python setup.py
+
+# OR manual setup:
+pip install -r requirements.txt
+python setup.py
 ```
 
-Open your browser to `http://localhost:8501` to access the EpiTuner interface.
+## 💻 System Requirements
 
-### 3. Using the GUI
+### Required
+- **Python 3.8+**
+- **NVIDIA GPU with 6GB+ VRAM** (for practical training)
+- **CUDA 11.8 or 12.1** (latest drivers recommended)
 
-1. **Data Upload** - Upload your CSV file with medical records
-2. **Model Selection** - Choose from your local Ollama models
-3. **Configuration** - Set training parameters and confidence thresholds
-4. **Training** - Fine-tune your LoRA model
-5. **Expert Review** - Review and correct model predictions
-6. **Export** - Download your trained model and results
+### Recommended Hardware
+- **RTX 3080/4070 (10-12GB)**: Excellent for most models
+- **RTX 4080/4090 (16-24GB)**: Can handle large models
+- **RTX 3060/4060 (8GB)**: Good for smaller models with QLoRA
 
-## Data Format
+### Minimum Hardware
+- **GTX 1660 Ti (6GB)**: Basic training with tiny models only
+- **RTX 2060 (6GB)**: Small model training possible
 
-Your CSV file should include these columns:
+## ⚠️ CUDA Installation
 
-### Required Columns
-- `C_Biosense_ID` - Unique identifier for each record
-- `ChiefComplaintOrig` - Chief complaints (separated by ;)
-- `DischargeDiagnosis` - Discharge diagnosis
-- `Expert Rating` - "Match", "Not a Match", or "Unknown/Not able to determine"
-- `Rationale_of_Rating` - Expert's reasoning for the rating
+If you don't have CUDA:
 
-### Optional but Recommended
-- `Sex` - Patient sex
-- `Age` - Patient age
-- `c_ethnicity` - Ethnicity
-- `c_race` - Race
-- `Admit_Reason_Combo` - Admission reasons
-- `Diagnosis_Combo` - Diagnosis codes with descriptors
-- `CCDD Category` - CCDD categories (separated by ;)
-- `TriageNotes` or `TriageNotesOrig` - Triage notes
+1. **Install NVIDIA Drivers**: https://www.nvidia.com/drivers
+2. **Install CUDA Toolkit**: https://developer.nvidia.com/cuda-downloads
+3. **Verify**: Run `nvidia-smi` in terminal
 
-### Sample Data
+## 🎯 GPU Memory Guide
 
-A sample dataset is provided in `sample_data/medical_sample.csv` for testing purposes.
+| GPU VRAM | Recommended Models | Training Mode |
+|----------|-------------------|---------------|
+| 24GB+ | Llama-2-7B, Mistral-7B | LoRA/QLoRA |
+| 12-16GB | Qwen-2.5-3B, Phi-2 | LoRA/QLoRA |
+| 8-10GB | TinyLlama, DialoGPT-Medium | QLoRA only |
+| 6GB | TinyLlama only | QLoRA only |
+| <6GB | Not recommended | CPU (very slow) |
 
-## Model Support
+## 📦 What Gets Installed
 
-EpiTuner works with models available in your local Ollama installation:
+### Core Dependencies
+- **PyTorch** (GPU version with CUDA support)
+- **Transformers** (Hugging Face)
+- **PEFT** (Parameter Efficient Fine-Tuning)
+- **BitsAndBytes** (Quantization)
+- **Accelerate** (Distributed training)
 
-### Recommended Models
-- **llama2** - Good general performance
-- **mistral** - Efficient and accurate
-- **phi** - Fast training, good for testing
-- **qwen** - Strong medical domain performance
+### Data & Evaluation
+- **Datasets** (Data loading)
+- **Pandas/Numpy** (Data processing)
+- **ROUGE/NLTK** (Evaluation metrics)
 
-### Install Ollama Models
+### UI & Monitoring
+- **Streamlit** (Web interface)
+- **TensorBoard** (Training monitoring)
+- **Plotly** (Visualizations)
 
-```bash
-# Install Ollama (visit https://ollama.ai)
-ollama pull llama2
-ollama pull mistral
-ollama pull phi
-```
-
-## Command Line Usage
-
-For advanced users, EpiTuner provides command-line tools:
-
-### Training
-
-```bash
-make train DATA=sample_data/medical_sample.csv \
-           MODEL=microsoft/phi-2 \
-           TOPIC="motor vehicle collision detection" \
-           OUTPUT=outputs/mvc_model
-```
-
-### Inference
-
-```bash
-make infer MODEL=outputs/mvc_model \
-           CONFIG=configs/config_base.yaml \
-           DATA=new_data.csv \
-           TOPIC="motor vehicle collision detection" \
-           OUTPUT=outputs/predictions.json
-```
-
-### Evaluation
-
-```bash
-make eval PREDICTIONS=outputs/predictions.json \
-          GROUND_TRUTH=sample_data/medical_sample.csv \
-          OUTPUT_DIR=outputs/evaluation
-```
-
-## Project Structure
-
-```
-EpiTuner/
-├── app.py                      # Main Streamlit application
-├── requirements.txt            # Python dependencies
-├── Makefile                   # Automation commands
-├── configs/
-│   └── config_base.yaml       # Training configuration
-├── scripts/
-│   ├── train.py               # Training script
-│   ├── inference.py           # Inference script
-│   └── evaluate.py            # Evaluation script
-├── chat_templates/
-│   └── medical_classification.jinja  # Chat template
-├── sample_data/
-│   └── medical_sample.csv     # Sample dataset
-├── outputs/                   # Training outputs
-├── data/                      # User data
-└── adapters/                  # LoRA adapters
-```
-
-## Configuration
-
-### Training Parameters
-
-Key configuration options in `configs/config_base.yaml`:
-
-```yaml
-model:
-  max_seq_len: 512             # Maximum sequence length
-
-train:
-  learning_rate: 2e-4          # Learning rate
-  num_epochs: 3                # Number of training epochs
-  batch_size: "auto"           # Automatic batch sizing
-
-tuning:
-  mode: "qlora"                # LoRA mode (qlora/lora/full)
-  lora_r: 16                   # LoRA rank
-  lora_alpha: 32               # LoRA alpha
-  lora_dropout: 0.1            # LoRA dropout
-
-confidence:
-  threshold: 0.7               # Auto-approval threshold
-```
-
-### Confidence Levels
-
-The system provides five confidence levels:
-- **Very Confident** - Model is highly certain
-- **Confident** - Model is reasonably certain  
-- **Somewhat Confident** - Model has moderate certainty
-- **Not Very Confident** - Model has low certainty
-- **Not at all Confident** - Model is very uncertain
-
-## Ollama Integration
-
-Once training is complete, integrate your model with Ollama:
-
-### 1. Save LoRA Adapter
-
-Download the LoRA adapter from the GUI or copy from `outputs/`.
-
-### 2. Create Modelfile
-
-```dockerfile
-FROM llama2
-ADAPTER ./adapter_model.safetensors
-
-TEMPLATE """{{ if .System }}{{ .System }}
-
-{{ end }}{{ .Prompt }}"""
-
-PARAMETER temperature 0.7
-PARAMETER top_p 0.9
-```
-
-### 3. Create Ollama Model
-
-```bash
-ollama create epituner-medical -f ./Modelfile
-```
-
-### 4. Use Your Model
-
-```bash
-# Interactive
-ollama run epituner-medical "Classify this medical record..."
-
-# API
-curl http://localhost:11434/api/generate \
-  -d '{"model": "epituner-medical", "prompt": "Your medical record here..."}'
-```
-
-## Evaluation Metrics
-
-EpiTuner provides comprehensive evaluation metrics:
-
-### Classification Metrics
-- **Accuracy** - Overall correctness
-- **Precision** - True positives / (True positives + False positives)
-- **Recall** - True positives / (True positives + False negatives)
-- **F1-Score** - Harmonic mean of precision and recall
-
-### Confidence Analysis
-- **Calibration** - How well confidence scores match actual accuracy
-- **Distribution** - Breakdown of predictions by confidence level
-- **Agreement Rate** - Model-expert agreement by confidence
-
-### Visualizations
-- Confusion matrices
-- Confidence calibration plots
-- Performance trends
-
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
-#### CUDA Out of Memory (Common on Consumer GPUs)
+**"CUDA not available"**
 ```bash
-# Step 1: Use consumer GPU config
-CONFIG=configs/config_consumer_gpu.yaml
+# Check NVIDIA driver
+nvidia-smi
 
-# Step 2: Reduce LoRA rank
-lora_r: 4  # Instead of 8 or 16
-
-# Step 3: Use smaller model
-MODEL=TinyLlama/TinyLlama-1.1B-Chat-v1.0
-
-# Step 4: Close other applications
-# - Close Chrome/browsers
-# - Close games or GPU-heavy apps
-# - Check Task Manager GPU usage
+# Reinstall GPU PyTorch
+python install_gpu.py
 ```
 
-#### Ollama Models Not Found
+**"Out of memory"**
 ```bash
-# Check Ollama installation
-make check-ollama
-
-# Install models
-ollama pull llama2
+# Use smaller models or QLoRA mode
+# Check GPU memory: nvidia-smi
 ```
 
-#### Training Slow (Windows Consumer GPU)
+**"ModuleNotFoundError"**
 ```bash
-# Use consumer GPU optimized config
-CONFIG=configs/config_consumer_gpu.yaml
-
-# Use smaller dataset for testing
-head -20 your_data.csv > small_data.csv
-
-# Optimize for consumer GPU
-num_epochs: 1
-lora_r: 4
-max_seq_len: 128
-
-# Windows-specific optimization
-dataloader_num_workers: 0  # Avoid multiprocessing issues
+# Reinstall dependencies
+pip install -r requirements.txt
 ```
 
-### System Requirements
+### GPU Not Detected
+1. Verify NVIDIA drivers: `nvidia-smi`
+2. Check CUDA installation: `nvcc --version`
+3. Reinstall PyTorch: `python install_gpu.py`
 
-**Windows 10/11 with Consumer GPU Setup:**
-- **GPU**: NVIDIA GTX 1660 Ti / RTX 3060 / RTX 4060 or better
-  - 4GB VRAM minimum (TinyLlama only)
-  - 6-8GB VRAM recommended (Phi-2, small models)
-  - 12GB+ VRAM ideal (larger models)
-- **RAM**: 16GB+ system RAM
-- **Storage**: 10GB+ free space for models and outputs
-- **Python**: 3.8+ (3.11 recommended)
-- **CUDA**: NVIDIA drivers 11.8+ (download from nvidia.com)
+### Low VRAM Issues
+1. Use QLoRA mode (4-bit quantization)
+2. Choose smaller models (TinyLlama, Phi-2)
+3. Reduce batch size in config
 
-## Advanced Usage
+## 🎮 Supported GPUs
 
-### Custom Chat Templates
+### Excellent (12GB+)
+- RTX 4070 Ti, 4080, 4090
+- RTX 3080, 3080 Ti, 3090
+- Tesla V100, A100
 
-Modify `chat_templates/medical_classification.jinja` to customize how data is formatted for training:
+### Good (8-10GB)
+- RTX 4070, 3070, 3070 Ti
+- RTX 2080 Ti
 
-```jinja
-Medical Record Classification
+### Basic (6-8GB)
+- RTX 4060, 3060, 2070
+- GTX 1660 Ti (6GB variant)
 
-Task: {{ classification_topic }}
+### Not Recommended (<6GB)
+- GTX 1060, 1050 Ti
+- Any CPU-only setup
 
-Record: {{ chief_complaint }}
-Diagnosis: {{ discharge_diagnosis }}
+## 🚀 After Setup
 
-Classification: {{ classification }}
-Confidence: {{ confidence }}
-Rationale: {{ rationale }}
-```
+Once setup is complete:
 
-### Custom Configurations
+1. **Test GPU**: Verify CUDA works
+2. **Run GUI**: Start the web interface
+3. **Load Data**: Upload your CSV or use samples
+4. **Train Model**: Choose QLoRA for memory efficiency
+5. **Evaluate**: Test your trained model
 
-Create new configuration files in `configs/` for different use cases:
+## 📚 Next Steps
 
-```yaml
-# configs/rapid_training.yaml
-train:
-  num_epochs: 1
-  learning_rate: 5e-4
+- **GUI Mode**: Run `streamlit run app.py`
+- **CLI Mode**: Use command line tools
+- **Custom Data**: Prepare your CSV files
+- **Model Selection**: Choose appropriate base models
 
-tuning:
-  lora_r: 8
-  lora_alpha: 16
-```
+## 🆘 Support
 
-### Batch Processing
+If you encounter issues:
 
-Process multiple datasets programmatically:
-
-```python
-from scripts.train import LoRATrainer
-from scripts.inference import MedicalClassificationInference
-
-# Train multiple models
-datasets = ['mvc_data.csv', 'fall_data.csv', 'cardiac_data.csv']
-for dataset in datasets:
-    # Training logic here
-    pass
-```
-
-## Contributing
-
-We welcome contributions! Please see our contribution guidelines for details.
-
-### Development Setup (Windows)
-
-```bash
-# Install development dependencies
-make dev-install
-
-# Check Windows environment
-make windows-check
-
-# Setup Windows directories
-make windows-setup
-
-# Format code
-make format
-
-# Run linting
-make lint
-```
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For support and questions:
-
-1. Check the troubleshooting section above
-2. Review the sample data and configurations
-3. Open an issue on GitHub
-4. Contact the development team
-
-## Roadmap
-
-### Version 0.2
-- [ ] Support for additional model architectures
-- [ ] Automated hyperparameter tuning
-- [ ] Multi-label classification support
-- [ ] Integration with more deployment platforms
-
-### Version 0.3
-- [ ] Federated learning capabilities
-- [ ] Advanced active learning strategies
-- [ ] Real-time model monitoring
-- [ ] Advanced data preprocessing tools
+1. **Check GPU**: Run `python install_gpu.py`
+2. **Validate Setup**: Run `python setup.py`
+3. **Check Logs**: Look for error messages
+4. **Hardware**: Verify your GPU meets requirements
 
 ---
 
-**EpiTuner** - Making medical AI accessible, reliable, and privacy-preserving.
-
-*Built for the medical AI community*
+**⚡ Ready to fine-tune? Your GPU-accelerated training system awaits!**

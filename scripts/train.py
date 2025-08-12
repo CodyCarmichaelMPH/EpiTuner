@@ -30,7 +30,7 @@ try:
     torch_version = torch.__version__
     torch_major, torch_minor = map(int, torch_version.split('.')[:2])
     
-    if torch_major < 2 or (torch_major == 2 and torch_minor < 2):
+    if torch_major < 2 or (torch_major == 2 and torch_minor < 1):
         print(f"Warning: PyTorch {torch_version} too old for BitsAndBytes. Disabling quantization.")
         HAS_BNB = False
         HAS_BNB_VALIDATION = False
@@ -47,7 +47,7 @@ try:
                 HAS_BNB_VALIDATION = True
             except ImportError:
                 HAS_BNB_VALIDATION = False
-                print("Warning: BnB validation function not available (newer transformers version)")
+                # This is fine - validation is optional
         except ImportError as e:
             print(f"Warning: BitsAndBytes import failed: {e}")
             HAS_BNB = False
