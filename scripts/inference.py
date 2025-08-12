@@ -245,22 +245,30 @@ class SyndromicSurveillanceClassificationInference:
             with open(template_path, 'r', encoding='utf-8') as f:
                 self.template = Template(f.read())
         else:
-            # Fallback template
-            self.template = Template("""
-            Syndromic Surveillance Record Classification Task
+            # Fallback template - matches medical_classification.jinja structure
+            self.template = Template("""{% for message in messages %}{% if message['role'] == 'user' %}**Medical Record Classification Task**
 
-            Classification Criteria: {{ classification_topic }}
+You are an expert medical coder tasked with classifying medical records. Your goal is to determine if the medical record matches the specified criteria.
 
-            Syndromic Surveillance Record:
-            - Chief Complaint: {{ chief_complaint }}
-            - Discharge Diagnosis: {{ discharge_diagnosis }}
-            - Demographics: {{ demographics }}
-            - Triage Notes: {{ triage_notes }}
+**Classification Criteria:** {{ classification_topic }}
 
-            Classification: [Match/Not a Match/Unknown]
-            Confidence: [Very Confident/Confident/Somewhat Confident/Not Very Confident/Not at all Confident]
-            Rationale: [Explanation]
-            """)
+**Medical Record:**
+- **Chief Complaint:** {{ message.content.chief_complaint }}
+- **Discharge Diagnosis:** {{ message.content.discharge_diagnosis }}
+- **Demographics:** {{ message.content.demographics }}
+- **Triage Notes:** {{ message.content.triage_notes }}
+
+Please provide your classification in the following format:
+1. **Classification:** [Match/Not a Match/Unknown]
+2. **Confidence:** [Very Confident/Confident/Somewhat Confident/Not Very Confident/Not at all Confident]
+3. **Rationale:** [Provide a detailed, evidence-based explanation that includes:
+   - Key medical indicators from the record that support your classification
+   - Specific symptoms, diagnoses, or demographic factors that align with the criteria
+   - Any conflicting or ambiguous information that influenced your decision
+   - Clinical reasoning for why this case does or does not meet the classification criteria
+   - Reference to specific sections of the medical record]
+
+{% endif %}{% endfor %}""")
     
     def format_record(self, record: Dict[str, Any], classification_topic: str) -> str:
         """Format a syndromic surveillance record for inference"""
@@ -309,17 +317,20 @@ class SyndromicSurveillanceClassificationInference:
             if torch.cuda.is_available():
                 inputs = {k: v.cuda() for k, v in inputs.items()}
             
-            # Generate response
+            # Generate response with optimized parameters for medical classification
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=self.config.get('generation', {}).get('max_new_tokens', 256),
-                    temperature=self.config.get('generation', {}).get('temperature', 0.7),
-                    top_p=self.config.get('generation', {}).get('top_p', 0.9),
+                    max_new_tokens=self.config.get('generation', {}).get('max_new_tokens', 512),  # Increased for detailed rationale
+                    temperature=self.config.get('generation', {}).get('temperature', 0.3),  # Lower temp for more consistent output
+                    top_p=self.config.get('generation', {}).get('top_p', 0.85),  # Slightly more focused
+                    top_k=self.config.get('generation', {}).get('top_k', 50),  # Add top_k for better quality
                     do_sample=True,
+                    repetition_penalty=1.1,  # Prevent repetitive text
                     pad_token_id=self.tokenizer.eos_token_id,
                     return_dict_in_generate=True,
-                    output_scores=True
+                    output_scores=True,
+                    early_stopping=True  # Stop when EOS is generated
                 )
             
             # Decode the generated text
@@ -341,9 +352,13 @@ class SyndromicSurveillanceClassificationInference:
             # Parse the generated response
             parsed_response = self._parse_response(generated_text)
             
-            # Add confidence information
+            # Add confidence information - prioritize calculated score over parsed text
             parsed_response['confidence_score'] = confidence_score
-            parsed_response['confidence_level'] = ConfidenceCalculator.confidence_to_level(confidence_score)
+            calculated_confidence_level = ConfidenceCalculator.confidence_to_level(confidence_score)
+            parsed_response['confidence_level'] = calculated_confidence_level
+            
+            # Use calculated confidence level as the main confidence field for consistency
+            parsed_response['confidence'] = calculated_confidence_level
             
             return parsed_response
             
@@ -364,28 +379,72 @@ class SyndromicSurveillanceClassificationInference:
         """Parse the model's response to extract classification, confidence, and rationale"""
         
         # Initialize defaults
-        classification = "Unknown"
+        classification = "Unknown/Not able to determine"
         confidence = "Somewhat Confident"
-        rationale = response_text.strip()
+        rationale = "No detailed rationale provided by the model."
         
-        # Try to extract structured information
-        # Look for patterns like "Classification: Match"
-        classification_match = re.search(r'Classification:\s*([^\n]+)', response_text, re.IGNORECASE)
-        if classification_match:
-            classification = classification_match.group(1).strip()
+        # Try to extract structured information with multiple pattern variations
+        # Look for classification patterns (more flexible)
+        classification_patterns = [
+            r'(?:Classification|1\.\s*\*?\*?Classification\*?\*?):\s*(.+?)(?:\n|\*|$)',
+            r'(?:^|\n)\s*(?:Classification|Answer):\s*(.+?)(?:\n|$)',
+            r'(?:^|\n)\s*(.+?)(?:\s*matches?|\s*does\s+not\s+match|\s*unknown)',
+        ]
         
-        # Look for confidence pattern
-        confidence_match = re.search(r'Confidence:\s*([^\n]+)', response_text, re.IGNORECASE)
-        if confidence_match:
-            confidence = confidence_match.group(1).strip()
+        for pattern in classification_patterns:
+            match = re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                classification = match.group(1).strip().rstrip('*').strip()
+                break
         
-        # Look for rationale pattern
-        rationale_match = re.search(r'Rationale:\s*([^\n]+(?:\n[^\n]+)*)', response_text, re.IGNORECASE)
-        if rationale_match:
-            rationale = rationale_match.group(1).strip()
+        # Look for confidence patterns (more flexible)
+        confidence_patterns = [
+            r'(?:Confidence|2\.\s*\*?\*?Confidence\*?\*?):\s*(.+?)(?:\n|\*|$)',
+            r'(?:^|\n)\s*(?:Confidence|Certainty):\s*(.+?)(?:\n|$)',
+        ]
+        
+        for pattern in confidence_patterns:
+            match = re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                confidence = match.group(1).strip().rstrip('*').strip()
+                break
+        
+        # Look for rationale patterns (more flexible and comprehensive)
+        rationale_patterns = [
+            r'(?:Rationale|3\.\s*\*?\*?Rationale\*?\*?):\s*(.*?)(?:\n\n|\n\s*(?:\d+\.|\*\*|$))',
+            r'(?:Explanation|Reasoning):\s*(.*?)(?:\n\n|\n\s*(?:\d+\.|\*\*|$))',
+            r'(?:Because|This is because|The reason):\s*(.*?)(?:\n\n|\n\s*(?:\d+\.|\*\*|$))',
+        ]
+        
+        for pattern in rationale_patterns:
+            match = re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+            if match:
+                extracted_rationale = match.group(1).strip()
+                if len(extracted_rationale) > 20:  # Only use if substantial
+                    rationale = extracted_rationale
+                    break
+        
+        # If no structured rationale found, try to extract meaningful content
+        if rationale == "No detailed rationale provided by the model.":
+            # Look for any substantive text after the classification/confidence
+            remaining_text = response_text
+            # Remove classification and confidence parts
+            for term in ['Classification:', 'Confidence:', '1.', '2.', '3.']:
+                if term in remaining_text:
+                    remaining_text = remaining_text.split(term, 1)[-1]
+            
+            # Clean and extract meaningful content
+            lines = [line.strip() for line in remaining_text.split('\n') if line.strip()]
+            meaningful_lines = [line for line in lines if len(line) > 20 and not line.startswith(('*', '-', 'Classification', 'Confidence'))]
+            
+            if meaningful_lines:
+                rationale = ' '.join(meaningful_lines[:3])  # Take first 3 meaningful lines
         
         # Clean up classification
         classification = self._normalize_classification(classification)
+        
+        # Clean up confidence
+        confidence = self._normalize_confidence(confidence)
         
         return {
             'classification': classification,
@@ -402,10 +461,27 @@ class SyndromicSurveillanceClassificationInference:
             return "Match"
         elif 'not' in classification and 'match' in classification:
             return "Not a Match"
-        elif 'unknown' in classification or 'unable' in classification:
+        elif 'unknown' in classification or 'unable' in classification or 'determine' in classification:
             return "Unknown/Not able to determine"
         else:
             return "Unknown/Not able to determine"
+    
+    def _normalize_confidence(self, confidence: str) -> str:
+        """Normalize confidence to standard values"""
+        confidence = confidence.lower().strip()
+        
+        if 'very confident' in confidence or 'extremely confident' in confidence:
+            return "Very Confident"
+        elif 'confident' in confidence and 'not' not in confidence and 'somewhat' not in confidence:
+            return "Confident"
+        elif 'somewhat' in confidence or 'moderately' in confidence:
+            return "Somewhat Confident"
+        elif 'not very' in confidence or 'low' in confidence:
+            return "Not Very Confident"
+        elif 'not at all' in confidence or 'no confidence' in confidence or 'uncertain' in confidence:
+            return "Not at all Confident"
+        else:
+            return "Somewhat Confident"  # Default fallback
     
     def predict_batch(self, records: List[Dict[str, Any]], classification_topic: str) -> List[Dict[str, Any]]:
         """Make predictions for a batch of syndromic surveillance records"""
