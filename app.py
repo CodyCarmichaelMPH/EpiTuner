@@ -1132,6 +1132,15 @@ def real_training(data_path: str, config_path: str, output_dir: str):
         print(f"Return code: {return_code}")
         
         if return_code == 0:
+            # Check if training actually completed by looking for completion messages
+            training_completed = any('training completed' in line.lower() or 'model saved' in line.lower() for line in output_lines)
+            
+            if not training_completed:
+                st.error("Training process exited but may not have completed successfully.")
+                st.info("Please check the training output for any errors or warnings.")
+                st.session_state.training_in_progress = False
+                return
+            
             # Ensure progress bar shows completion
             progress_bar.progress(1.0)
             status_text.text("✅ Training completed successfully!")
@@ -1156,6 +1165,16 @@ def real_training(data_path: str, config_path: str, output_dir: str):
             if metrics_path.exists():
                 with open(metrics_path, 'r') as f:
                     training_metrics = json.load(f)
+                
+                # Check if essential model files exist
+                essential_files = ['pytorch_model.bin', 'config.json']
+                missing_files = [f for f in essential_files if not (Path(output_dir) / f).exists()]
+                
+                if missing_files:
+                    st.error(f"Training completed but essential model files are missing: {missing_files}")
+                    st.info("This may indicate the training process was interrupted or failed to save properly.")
+                    st.session_state.training_in_progress = False
+                    return
                 
                 # Create results from actual training metrics
                 results = {
@@ -1200,13 +1219,14 @@ def real_training(data_path: str, config_path: str, output_dir: str):
                 st.info("Please check the training output for errors and try again.")
                 return
             
+            # Store training results and proceed to expert review
             st.session_state.model_results = results
             st.session_state.training_in_progress = False
             
-            st.success("🎉 Real LoRA training completed successfully!")
-            st.info("Your model has been trained and saved. Proceeding to Expert Review...")
+            st.success("🎉 Training completed successfully!")
+            st.info("Training is complete. Proceeding to Expert Review...")
             
-            time.sleep(3)
+            time.sleep(2)
             st.session_state.current_step = 'expert_review'
             st.rerun()
             
@@ -1434,6 +1454,7 @@ def incorporate_expert_feedback():
     
     # Clear the expert feedback since it's been incorporated
     st.session_state.expert_feedback = []
+
 
 
 def step_expert_review():
