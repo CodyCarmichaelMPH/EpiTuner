@@ -1208,6 +1208,9 @@ def real_training(data_path: str, config_path: str, output_dir: str):
                     print(f"Files in output directory: {existing_files}")
                     results['debug_files'] = existing_files
                 
+                # Store basic results first
+                st.session_state.model_results = results
+                
                 # Run real inference to get actual predictions and metrics
                 predictions = run_real_inference()
                 if predictions:
@@ -1225,25 +1228,23 @@ def real_training(data_path: str, config_path: str, output_dir: str):
                         y_true, y_pred, average='weighted', zero_division=0
                     )
                     
-                    results.update({
+                    # Update results with inference metrics
+                    st.session_state.model_results.update({
                         'accuracy': accuracy,
                         'precision': precision,
                         'recall': recall,
                         'f1_score': f1,
-                        'predictions': predictions,
-                        'training_metrics': training_metrics
+                        'predictions': predictions
                     })
                 else:
-                    st.error("Failed to generate predictions. Please check the model.")
-                    return
+                    st.warning("Could not generate predictions during training. You can still review the model in Expert Review.")
             else:
                 # No metrics file found - this indicates a training problem
                 st.error("Training completed but no metrics file found. This indicates the training may have failed.")
                 st.info("Please check the training output for errors and try again.")
                 return
             
-            # Store training results and proceed to expert review
-            st.session_state.model_results = results
+            # Training completed successfully
             st.session_state.training_in_progress = False
             
             st.success("🎉 Training completed successfully!")
@@ -1332,8 +1333,12 @@ def run_real_inference():
         st.error("No data uploaded. Please upload your medical data first.")
         return []
     
-    if not st.session_state.model_results or 'model_path' not in st.session_state.model_results:
+    if not st.session_state.model_results:
         st.error("No trained model available. Please complete training first.")
+        return []
+    
+    if 'model_path' not in st.session_state.model_results:
+        st.error("Model path not found in results. Please complete training first.")
         return []
     
     # Check if model files actually exist
@@ -1362,7 +1367,7 @@ def run_real_inference():
         config_path = st.session_state.model_results.get('config_path', 'configs/config_base.yaml')
         
         # Initialize inference engine
-        inference_engine = MedicalClassificationInference(
+        inference_engine = SyndromicSurveillanceClassificationInference(
             model_path=model_path,
             config_path=config_path
         )
@@ -1391,21 +1396,36 @@ def run_real_inference():
                 'triage_notes': row.get('TriageNotes', row.get('TriageNotesOrig', ''))
             }
             
-            # Run inference
-            result = inference_engine.predict_single(surveillance_record, classification_topic)
-            
-            # Format prediction for display
-            prediction = {
-                'biosense_id': row['C_Biosense_ID'],
-                'expert_rating': row['Expert Rating'],
-                'model_rating': result['classification'],
-                'confidence': result['confidence'],
-                'confidence_score': result.get('confidence_score', 0.0),
-                'model_rationale': result['rationale'],
-                'agreement': result['classification'] == row['Expert Rating'],
-                'chief_complaint': row['ChiefComplaintOrig'],
-                'discharge_diagnosis': row['DischargeDiagnosis']
-            }
+            # Run inference with error handling
+            try:
+                result = inference_engine.predict_single(surveillance_record, classification_topic)
+                
+                # Format prediction for display
+                prediction = {
+                    'biosense_id': row['C_Biosense_ID'],
+                    'expert_rating': row['Expert Rating'],
+                    'model_rating': result.get('classification', 'Unknown'),
+                    'confidence': result.get('confidence', 'Low'),
+                    'confidence_score': result.get('confidence_score', 0.0),
+                    'model_rationale': result.get('rationale', 'No rationale available'),
+                    'agreement': result.get('classification', 'Unknown') == row['Expert Rating'],
+                    'chief_complaint': row['ChiefComplaintOrig'],
+                    'discharge_diagnosis': row['DischargeDiagnosis']
+                }
+            except Exception as e:
+                print(f"Error predicting record {row['C_Biosense_ID']}: {str(e)}")
+                # Create a fallback prediction
+                prediction = {
+                    'biosense_id': row['C_Biosense_ID'],
+                    'expert_rating': row['Expert Rating'],
+                    'model_rating': 'Error',
+                    'confidence': 'Error',
+                    'confidence_score': 0.0,
+                    'model_rationale': f'Prediction failed: {str(e)}',
+                    'agreement': False,
+                    'chief_complaint': row['ChiefComplaintOrig'],
+                    'discharge_diagnosis': row['DischargeDiagnosis']
+                }
             
             predictions.append(prediction)
             
