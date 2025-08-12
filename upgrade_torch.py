@@ -37,17 +37,35 @@ def upgrade_torch():
     """Upgrade PyTorch to compatible version"""
     print("\nUpgrading PyTorch to compatible version...")
     
-    # Check if CUDA is available
+    # Check if NVIDIA GPU is detected by system (not just PyTorch)
+    nvidia_detected = False
+    try:
+        import subprocess
+        result = subprocess.run(['powershell', '-Command', 
+            'Get-WmiObject -Class Win32_VideoController | Where-Object {$_.Name -like "*NVIDIA*"} | Select-Object Name'], 
+            capture_output=True, text=True)
+        if result.returncode == 0 and result.stdout.strip():
+            nvidia_detected = True
+            print("NVIDIA GPU detected by system - installing CUDA version")
+    except:
+        pass
+    
+    # Check if CUDA is available to current PyTorch
+    cuda_available = False
     try:
         import torch
-        if torch.cuda.is_available():
-            print("CUDA detected - installing CUDA version")
-            cmd = [sys.executable, "-m", "pip", "install", "torch>=2.2.0,<=2.7.1", "torchvision>=0.17.0", "torchaudio>=2.2.0", "--index-url", "https://download.pytorch.org/whl/cu121"]
-        else:
-            print("No CUDA - installing CPU version")
-            cmd = [sys.executable, "-m", "pip", "install", "torch>=2.2.0,<=2.7.1", "torchvision>=0.17.0", "torchaudio>=2.2.0", "--index-url", "https://download.pytorch.org/whl/cpu"]
+        cuda_available = torch.cuda.is_available()
+        if cuda_available:
+            print("CUDA already available - installing updated CUDA version")
     except ImportError:
-        print("PyTorch not installed - installing CPU version by default")
+        pass
+    
+    # Determine which PyTorch to install
+    if nvidia_detected or cuda_available:
+        print("Installing CUDA-enabled PyTorch for NVIDIA GPU support")
+        cmd = [sys.executable, "-m", "pip", "install", "torch>=2.2.0,<=2.7.1", "torchvision>=0.17.0", "torchaudio>=2.2.0", "--index-url", "https://download.pytorch.org/whl/cu121"]
+    else:
+        print("No NVIDIA GPU detected - installing CPU version")
         cmd = [sys.executable, "-m", "pip", "install", "torch>=2.2.0,<=2.7.1", "torchvision>=0.17.0", "torchaudio>=2.2.0", "--index-url", "https://download.pytorch.org/whl/cpu"]
     
     try:
