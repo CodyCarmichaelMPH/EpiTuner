@@ -1,39 +1,18 @@
-# Production SFT Training System - RTX Quadro 4000 (8GB VRAM)
-# Install PyTorch GPU version FIRST, then run this
+# EpiTuner - Minimal Requirements
+# Only essential dependencies for "Always Works" approach
 
-# Core ML Libraries (install after PyTorch GPU)
+# Core ML libraries (REQUIRED)
+torch>=2.0.0
 transformers>=4.35.0
 datasets>=2.14.0
-accelerate>=0.24.0
 peft>=0.6.0
 
-# Quantization for 8GB GPU (QLoRA essential)
-bitsandbytes>=0.41.0
-
-# Data Processing
-pandas>=1.5.0
-numpy>=1.24.0
-scikit-learn>=1.3.0
-tqdm>=4.65.0
-
-# Configuration and Templates
-pyyaml>=6.0
-jinja2>=3.1.0
-
-# Evaluation Metrics
-evaluate>=0.4.0
-rouge-score>=0.1.2
-nltk>=3.8.0
-
-# UI and Visualization
+# UI and data processing (REQUIRED)
 streamlit>=1.28.0
-plotly>=5.17.0
+pandas>=1.5.0
 
-# Monitoring
-tensorboard>=2.14.0
+# Optional but recommended
+accelerate>=0.24.0  # Faster training
+bitsandbytes>=0.41.0  # Quantization (may fail on some systems)
 
-# System utilities
-psutil>=5.9.0
-
-# Optional: Unsloth for 2x faster training (if compatible)
-# unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+# Note: scipy, nltk, evaluate, rouge-score, tensorboard removed for simplicity

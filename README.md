@@ -1,161 +1,145 @@
-# EpiTuner SFT - Enhanced Fine-Tuning System
+# EpiTuner - Simple Medical LoRA Training
 
-A comprehensive fine-tuning system with QLoRA/LoRA support for medical case evaluation and beyond.
+Simple, reliable LoRA fine-tuning for medical syndromic surveillance data.
 
-## 🚀 Quick Setup (GPU Required)
+## ✨ Features
 
-### Step 1: GPU Setup (CRITICAL)
+- **Always Works™** - Simplified architecture with minimal dependencies
+- **Local-only processing** - Your medical data never leaves your machine
+- **Consumer GPU friendly** - Optimized for RTX 3060/4060 class hardware
+- **Ollama integration** - Use your locally downloaded models
+- **Expert review workflow** - Human-in-the-loop validation
+
+## 🚀 Quick Start
+
+### 1. Install Dependencies
+
 ```bash
-# First, ensure GPU PyTorch is installed
-python install_gpu.py
+# Clone repository
+git clone [your-repo-url]
+cd EpiTuner
 
-# Verify GPU is working
-python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
-```
-
-### Step 2: Complete Setup
-```bash
-# Run full setup
-python setup.py
-
-# OR manual setup:
+# Install requirements
 pip install -r requirements.txt
-python setup.py
+
+# Install Ollama models
+ollama pull llama3.2:1b
+ollama pull phi3
 ```
 
-## 💻 System Requirements
+### 2. Run the GUI
 
-### Required
-- **Python 3.8+**
-- **NVIDIA GPU with 6GB+ VRAM** (for practical training)
-- **CUDA 11.8 or 12.1** (latest drivers recommended)
-
-### Recommended Hardware
-- **RTX 3080/4070 (10-12GB)**: Excellent for most models
-- **RTX 4080/4090 (16-24GB)**: Can handle large models
-- **RTX 3060/4060 (8GB)**: Good for smaller models with QLoRA
-
-### Minimum Hardware
-- **GTX 1660 Ti (6GB)**: Basic training with tiny models only
-- **RTX 2060 (6GB)**: Small model training possible
-
-## ⚠️ CUDA Installation
-
-If you don't have CUDA:
-
-1. **Install NVIDIA Drivers**: https://www.nvidia.com/drivers
-2. **Install CUDA Toolkit**: https://developer.nvidia.com/cuda-downloads
-3. **Verify**: Run `nvidia-smi` in terminal
-
-## 🎯 GPU Memory Guide
-
-| GPU VRAM | Recommended Models | Training Mode |
-|----------|-------------------|---------------|
-| 24GB+ | Llama-2-7B, Mistral-7B | LoRA/QLoRA |
-| 12-16GB | Qwen-2.5-3B, Phi-2 | LoRA/QLoRA |
-| 8-10GB | TinyLlama, DialoGPT-Medium | QLoRA only |
-| 6GB | TinyLlama only | QLoRA only |
-| <6GB | Not recommended | CPU (very slow) |
-
-## 📦 What Gets Installed
-
-### Core Dependencies
-- **PyTorch** (GPU version with CUDA support)
-- **Transformers** (Hugging Face)
-- **PEFT** (Parameter Efficient Fine-Tuning)
-- **BitsAndBytes** (Quantization)
-- **Accelerate** (Distributed training)
-
-### Data & Evaluation
-- **Datasets** (Data loading)
-- **Pandas/Numpy** (Data processing)
-- **ROUGE/NLTK** (Evaluation metrics)
-
-### UI & Monitoring
-- **Streamlit** (Web interface)
-- **TensorBoard** (Training monitoring)
-- **Plotly** (Visualizations)
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**"CUDA not available"**
 ```bash
-# Check NVIDIA driver
-nvidia-smi
-
-# Reinstall GPU PyTorch
-python install_gpu.py
+streamlit run app.py
 ```
 
-**"Out of memory"**
+### 3. Follow the 5-Step Process
+
+1. **📁 Upload** - CSV with medical data
+2. **🤖 Model** - Select Ollama model + classification task  
+3. **🎯 Train** - LoRA training (10-60 minutes)
+4. **📊 Review** - Check model predictions
+5. **💾 Download** - Get your trained model
+
+## 📋 Data Format
+
+Your CSV must have these columns:
+
+- `C_Biosense_ID` - Unique identifier
+- `ChiefComplaintOrig` - Chief complaint text
+- `DischargeDiagnosis` - Discharge diagnosis
+- `Expert Rating` - Match/Not a Match/Unknown/Not able to determine  
+- `Rationale_of_Rating` - Expert's reasoning
+
+## 🖥️ System Requirements
+
+**Minimum:**
+- Windows 10/11
+- 8GB RAM
+- Python 3.8+
+- Ollama installed
+
+**Recommended:**
+- NVIDIA GPU (RTX 3060 or better)
+- 16GB RAM
+- 50GB free disk space
+
+## 🛠️ CLI Usage
+
+For advanced users or batch processing:
+
 ```bash
-# Use smaller models or QLoRA mode
-# Check GPU memory: nvidia-smi
+# Train a model
+python scripts/train.py \
+  --data data.csv \
+  --model microsoft/Phi-3-mini-4k-instruct \
+  --topic "Motor vehicle collisions" \
+  --output outputs/my_model \
+  --epochs 2
+
+# Make predictions  
+python scripts/predict.py \
+  --model outputs/my_model \
+  --data new_data.csv \
+  --topic "Motor vehicle collisions" \
+  --output predictions.json
 ```
 
-**"ModuleNotFoundError"**
+## 🐛 Troubleshooting
+
+### "No Ollama models found"
 ```bash
-# Reinstall dependencies
+ollama pull llama3.2:1b
+ollama pull phi3
+```
+
+### "CUDA out of memory"
+- Use a smaller model (llama3.2:1b)
+- Reduce batch size in config
+- Close other GPU applications
+
+### "Module not found" errors
+```bash
 pip install -r requirements.txt
 ```
 
-### GPU Not Detected
-1. Verify NVIDIA drivers: `nvidia-smi`
-2. Check CUDA installation: `nvcc --version`
-3. Reinstall PyTorch: `python install_gpu.py`
+### Training fails
+- Check model name is correct
+- Ensure data has required columns
+- Try CPU-only mode by setting `device="cpu"`
 
-### Low VRAM Issues
-1. Use QLoRA mode (4-bit quantization)
-2. Choose smaller models (TinyLlama, Phi-2)
-3. Reduce batch size in config
+## 📖 Architecture
 
-## 🎮 Supported GPUs
+```
+EpiTuner/
+├── epituner/
+│   ├── core/           # Core training & inference 
+│   └── utils/          # Hardware detection
+├── scripts/            # CLI tools
+├── configs/            # Single adaptive config
+├── sample_data/        # Example data
+└── app.py             # Streamlit GUI (~400 lines)
+```
 
-### Excellent (12GB+)
-- RTX 4070 Ti, 4080, 4090
-- RTX 3080, 3080 Ti, 3090
-- Tesla V100, A100
+**Key Simplifications:**
+- 5 required dependencies (vs 15+ before)
+- 1 config file (vs 5 before)
+- Linear workflow (vs complex state management)
+- Template-free text processing
+- Graceful fallbacks for optional components
 
-### Good (8-10GB)
-- RTX 4070, 3070, 3070 Ti
-- RTX 2080 Ti
+## 🤝 Contributing
 
-### Basic (6-8GB)
-- RTX 4060, 3060, 2070
-- GTX 1660 Ti (6GB variant)
+This is designed for **simplicity and reliability**. Before adding features:
 
-### Not Recommended (<6GB)
-- GTX 1060, 1050 Ti
-- Any CPU-only setup
+1. Does it align with "Always Works™" philosophy?
+2. Is it essential for core functionality?  
+3. Does it add complexity that could break?
 
-## 🚀 After Setup
+## 📄 License
 
-Once setup is complete:
-
-1. **Test GPU**: Verify CUDA works
-2. **Run GUI**: Start the web interface
-3. **Load Data**: Upload your CSV or use samples
-4. **Train Model**: Choose QLoRA for memory efficiency
-5. **Evaluate**: Test your trained model
-
-## 📚 Next Steps
-
-- **GUI Mode**: Run `streamlit run app.py`
-- **CLI Mode**: Use command line tools
-- **Custom Data**: Prepare your CSV files
-- **Model Selection**: Choose appropriate base models
-
-## 🆘 Support
-
-If you encounter issues:
-
-1. **Check GPU**: Run `python install_gpu.py`
-2. **Validate Setup**: Run `python setup.py`
-3. **Check Logs**: Look for error messages
-4. **Hardware**: Verify your GPU meets requirements
+[Your License Here]
 
 ---
 
-**⚡ Ready to fine-tune? Your GPU-accelerated training system awaits!**
+**Always Works™ Philosophy**: Simple things should be simple. Complex things should be possible. Broken things should be impossible.
