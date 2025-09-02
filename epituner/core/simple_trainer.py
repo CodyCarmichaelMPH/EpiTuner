@@ -25,6 +25,14 @@ try:
     HAS_TRANSFORMERS = True
 except ImportError:
     HAS_TRANSFORMERS = False
+    # Create dummy Dataset class for type hints when datasets not available
+    class Dataset:
+        @staticmethod
+        def from_dict(data):
+            raise ImportError("datasets library not installed. Install with: pip install datasets")
+        
+        def map(self, *args, **kwargs):
+            raise ImportError("datasets library not installed. Install with: pip install datasets")
 
 try:
     from peft import LoraConfig, get_peft_model, TaskType
